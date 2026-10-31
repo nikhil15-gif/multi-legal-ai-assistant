@@ -84,7 +84,9 @@ flowchart TD
 | Layer | Technologies Selected | Rationale |
 |---|---|---|
 | **Frontend** | React 18, Vite, Tailwind CSS, Lucide Icons | Modern, lightweight, fast build system, responsive UI across mobile & desktop. |
-| **Voice Input** | Web Speech API (`webkitSpeechRecognition`) | Native browser speech-to-text supporting `en-IN`, `hi-IN`, `kn-IN` without paid cloud speech APIs. |
+| **Voice Input** | MediaRecorder + local Faster-Whisper | English, Hindi, and Kannada speech is transcribed on the local backend; recorded audio is not sent to a speech provider. The multilingual model is downloaded once on first use. |
+| **Voice Output** | Browser Speech Synthesis API | Reads assistant replies aloud using the selected English, Hindi, or Kannada voice available in the browser/operating system. |
+| **Chat History** | Browser `localStorage` | Saves up to 50 conversations in the current browser profile on this device; no history account or cloud sync is used. |
 | **Backend** | Python 3.10+, FastAPI, Uvicorn, Pydantic V2 | High-throughput async REST endpoints, automatic OpenAPI documentation, strict schema validation. |
 | **Local AI Engine** | Ollama, Meta Llama 3.1 (8B Parameters) | Runs entirely on user's machine, zero API costs, zero data leakage, high reasoning capacity. |
 | **Information Retrieval** | Scikit-learn (TF-IDF Vectorizer), Cosine Similarity | Deterministic, ultra-fast (<20ms), easily deployable without heavy vector database overhead. |
@@ -197,6 +199,9 @@ winget install OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agr
 
 # 3. (Optional) Install Ollama for local LLM
 winget install Ollama.Ollama --accept-package-agreements --accept-source-agreements
+
+# 4. Install Tesseract OCR for scanned PDFs and images
+winget install --id UB-Mannheim.TesseractOCR --exact --accept-package-agreements --accept-source-agreements
 ```
 *(After installing, close and reopen your terminal or VS Code to refresh the PATH).*
 
@@ -204,6 +209,20 @@ winget install Ollama.Ollama --accept-package-agreements --accept-source-agreeme
 - **Python:** [https://www.python.org/downloads/](https://www.python.org/downloads/) *(⚠️ Important: Check the box "Add Python to PATH" on the first setup screen!)*
 - **Node.js:** [https://nodejs.org/](https://nodejs.org/) *(Download the LTS version and install).*
 - **Ollama:** [https://ollama.com/download/windows](https://ollama.com/download/windows)
+- **Tesseract OCR:** [Windows installer from UB Mannheim](https://github.com/UB-Mannheim/tesseract/wiki)
+
+Scanned document OCR also needs English, Hindi, and Kannada language data. From the project root, place these files in `backend/models/tessdata` (the folder is created automatically by the commands below):
+
+```powershell
+$tessdata = "backend\models\tessdata"
+New-Item -ItemType Directory -Force $tessdata | Out-Null
+$source = "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main"
+foreach ($language in @("eng", "hin", "kan")) {
+    Invoke-WebRequest -Uri "$source/${language}.traineddata" -OutFile "$tessdata\${language}.traineddata"
+}
+```
+
+The backend locates the engine and these language files automatically, including when the project path contains spaces.
 
 ---
 
@@ -359,11 +378,13 @@ Follow this script during your major project examination:
    > *"What is the notice period for terminating this lease?"*
 5. **Expected Result:** The assistant extracts Clause 3, identifies the 1-month written notice requirement, and explains the legal jargon found in the document.
 
-### Test 6: Voice Input
+### Test 6: Voice Input and Output
 1. In the chat interface, click the **Microphone** icon.
 2. Grant microphone permission when prompted by your browser.
 3. Speak clearly in English, Hindi, or Kannada.
-4. The transcription appears in the input field for your review before sending.
+4. On first use, the backend downloads the local multilingual speech model. Keep the backend online until the download completes.
+5. Click the microphone again to stop. The transcript appears in the input field for review before sending; recorded audio is transcribed locally and discarded.
+6. Click **Listen** on an assistant reply to hear it, and **Stop** to stop playback.
 
 ---
 
@@ -402,8 +423,8 @@ python tests/evaluate.py
 |---|---|---|
 | **Ollama status shows "Offline"** | Ollama daemon is not running | Run `ollama serve` in a separate terminal. Verify `http://localhost:11434/api/tags` loads in your browser. *(Note: LegalSaathi automatically uses verified knowledge base direct grounding if Ollama is offline).* |
 | **Model not found error** | `llama3.1:latest` has not been downloaded | Run `ollama run llama3.1:latest` in terminal to download weights (~4.7 GB). |
-| **Speech recognition not working** | Browser does not support Web Speech API | Use Google Chrome, Microsoft Edge, or Safari. Ensure microphone permissions are allowed. |
-| **PDF text extraction returns empty** | PDF contains scanned images without digital text layer | Ensure `tesseract` is installed on your Mac (`brew install tesseract`) so OCR can process scanned image pages. |
+| **Voice input not working** | Microphone permission is blocked, or the local speech model has not finished downloading | Use a current Chrome/Edge browser at localhost or HTTPS, allow microphone access, keep the backend running, and retry after the first model download completes. |
+| **PDF text extraction returns empty** | PDF contains scanned images without a digital text layer, or OCR engine/language data is missing | Install Tesseract ([Windows installer](https://github.com/UB-Mannheim/tesseract/wiki); on macOS run `brew install tesseract`) and add the `eng`, `hin`, and `kan` models to `backend/models/tessdata` as described above. Restart the backend after installation. |
 | **Port 8000 or 5173 already in use** | A previous instance is running | Kill the existing process: `lsof -i :8000` then `kill -9 <PID>`, or change ports in `app/main.py` and `vite.config.js`. |
 
 ---

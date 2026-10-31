@@ -19,5 +19,8 @@ PyMuPDF>=1.23.0
 Pillow>=10.0.0
 pytesseract>=0.3.10
 
+# Local multilingual speech recognition (English, Hindi, Kannada)
+faster-whisper>=1.1.0,<2.0.0
+
 # Testing
 pytest>=8.0.0

@@ -123,6 +123,7 @@ class DocumentSummarizeResponse(BaseModel):
 class AIStatusResponse(BaseModel):
     provider: str
     ollama_reachable: bool
+    target_model_installed: bool
     ollama_models: List[str]
     active_model: str
     is_ready: bool

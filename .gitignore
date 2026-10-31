@@ -41,6 +41,7 @@ dist-ssr/
 
 # Uploaded User Documents
 backend/uploads/
+backend/models/
 *.pdf
 *.png
 *.jpg

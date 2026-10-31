@@ -96,7 +96,7 @@ export default function AboutPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
           <div className="p-3.5 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
             <h4 className="font-bold text-slate-900 dark:text-white">Frontend Architecture</h4>
-            <p className="text-slate-500 dark:text-slate-400 mt-1">React 18, Vite, Tailwind CSS, Lucide Icons, Web Speech API.</p>
+            <p className="text-slate-500 dark:text-slate-400 mt-1">React 18, Vite, Tailwind CSS, MediaRecorder, local Faster-Whisper voice input, and browser speech playback.</p>
           </div>
           <div className="p-3.5 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
             <h4 className="font-bold text-slate-900 dark:text-white">Backend Server</h4>

@@ -18,6 +18,10 @@ class OllamaService:
         self.base_url = (base_url or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")).rstrip("/")
         self.model = model or os.getenv("OLLAMA_MODEL", "llama3.1:latest")
         self.timeout = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", timeout))
+        self.cpu_timeout = int(os.getenv("OLLAMA_CPU_TIMEOUT_SECONDS", max(self.timeout, 180)))
+        self.cpu_max_tokens = int(os.getenv("OLLAMA_CPU_NUM_PREDICT", 512))
+        force_cpu = os.getenv("OLLAMA_CPU_FALLBACK", "false").strip().lower()
+        self._cpu_fallback = force_cpu in {"1", "true", "yes", "on"}
 
     def check_health(self) -> Dict[str, Any]:
         """
@@ -77,15 +81,51 @@ class OllamaService:
             "prompt": prompt,
             "stream": False
         }
+        if self._cpu_fallback:
+            payload["options"] = {"num_gpu": 0, "num_predict": self.cpu_max_tokens}
         if system_prompt:
             payload["system"] = system_prompt
 
         try:
-            resp = requests.post(
-                f"{self.base_url}/api/generate",
-                json=payload,
-                timeout=self.timeout
+            request_timeout = self.cpu_timeout if self._cpu_fallback else self.timeout
+            try:
+                resp = requests.post(
+                    f"{self.base_url}/api/generate",
+                    json=payload,
+                    timeout=request_timeout
+                )
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
+                if self._cpu_fallback:
+                    raise
+                logger.warning("Ollama GPU inference timed out or disconnected; retrying on CPU.")
+                self._cpu_fallback = True
+                payload["options"] = {"num_gpu": 0, "num_predict": self.cpu_max_tokens}
+                request_timeout = self.cpu_timeout
+                resp = requests.post(
+                    f"{self.base_url}/api/generate",
+                    json=payload,
+                    timeout=request_timeout
+                )
+
+            # If CUDA initialization fails on this machine, retry the same
+            # grounded request on CPU and keep using CPU for later requests.
+            gpu_error_markers = (
+                "cuda error",
+                "shared object initialization failed",
+                "llama-server process has terminated",
             )
+            response_error = resp.text.lower() if resp.status_code >= 500 else ""
+            if not self._cpu_fallback and any(marker in response_error for marker in gpu_error_markers):
+                logger.warning("Ollama GPU initialization failed; retrying model generation on CPU.")
+                self._cpu_fallback = True
+                payload["options"] = {"num_gpu": 0, "num_predict": self.cpu_max_tokens}
+                request_timeout = self.cpu_timeout
+                resp = requests.post(
+                    f"{self.base_url}/api/generate",
+                    json=payload,
+                    timeout=request_timeout
+                )
+
             if resp.status_code == 200:
                 data = resp.json()
                 return {
@@ -112,7 +152,7 @@ class OllamaService:
             return {
                 "success": False,
                 "response": None,
-                "error": f"Ollama model inference timed out after {self.timeout} seconds.",
+                "error": f"Ollama model inference timed out after {request_timeout} seconds.",
                 "suggestion": "Your computer may need more CPU/RAM resources or a smaller model."
             }
         except requests.exceptions.RequestException as e:

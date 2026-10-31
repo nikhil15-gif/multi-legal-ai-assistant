@@ -71,9 +71,11 @@ export default function Navbar({
           <div className="flex items-center space-x-3">
             {/* AI Provider Status Indicator */}
             <div className="hidden lg:flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-800 border border-slate-700">
-              <span className={`w-2 h-2 rounded-full ${aiStatus?.ollama_reachable ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+              <span className={`w-2 h-2 rounded-full ${aiStatus?.is_ready ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
               <span className="text-slate-300">
-                {aiStatus?.ollama_reachable ? 'Ollama: llama3.1' : 'KB Direct Grounding'}
+                {aiStatus?.is_ready
+                  ? `Ollama: ${String(aiStatus.active_model || 'llama3.1').split(':')[0]}`
+                  : aiStatus?.ollama_reachable ? 'Ollama: model not ready' : 'KB Direct Grounding'}
               </span>
             </div>
 

@@ -33,13 +33,22 @@ class AIService:
     def get_status(self) -> Dict[str, Any]:
         """Returns the status of all AI providers."""
         ollama_health = ollama_service.check_health()
+        model_installed = ollama_health["target_model_installed"]
+        is_ready = ollama_health["reachable"] and model_installed
+        if not ollama_health["reachable"]:
+            message = ollama_health["error"]
+        elif not model_installed:
+            message = f"Ollama is running, but '{ollama_health['active_model']}' is not installed yet."
+        else:
+            message = "Ollama and the configured model are ready."
         return {
             "provider": self.default_provider,
             "ollama_reachable": ollama_health["reachable"],
+            "target_model_installed": model_installed,
             "ollama_models": ollama_health["models"],
             "active_model": ollama_health["active_model"],
-            "is_ready": ollama_health["reachable"],
-            "message": "Ollama is ready" if ollama_health["reachable"] else ollama_health["error"],
+            "is_ready": is_ready,
+            "message": message,
             "optional_providers": {
                 "claude": claude_service.is_configured(),
                 "openai": openai_service.is_configured()
@@ -145,16 +154,13 @@ Include:
         entries when the local LLM is offline or busy.
         """
         notice_en = (
-            "*[Note: Local Ollama service is currently offline or loading. "
-            "Displaying verified statutory guidance directly from LegalSaathi's curated Indian legal database.]*\n\n"
+            "*Local AI is temporarily unavailable. This answer uses verified information from LegalSaathi's legal database.*\n\n"
         )
         notice_hi = (
-            "*[नोट: स्थानीय ओलामा (Ollama) सेवा वर्तमान में ऑफलाइन है। "
-            "लीगलसाथी के सत्यापित भारतीय कानूनी डेटाबेस से सीधा मार्गदर्शन नीचे प्रस्तुत है।]*\n\n"
+            "*स्थानीय AI अभी उपलब्ध नहीं है। यह उत्तर LegalSaathi के सत्यापित कानूनी डेटाबेस पर आधारित है।*\n\n"
         )
         notice_kn = (
-            "*[ಸೂಚನೆ: ಸ್ಥಳೀಯ ಒಲಾಮಾ (Ollama) ಸೇವೆ ಪ್ರಸ್ತುತ ಆಫ್‌ಲೈನ್‌ನಲ್ಲಿದೆ. "
-            "ಲೀಗಲ್‌ಸಾಥಿಯ ಪರಿಶೀಲಿಸಿದ ಭಾರತೀಯ ಕಾನೂನು ಡೇಟಾಬೇಸ್‌ನಿಂದ ನೇರ ಮಾರ್ಗದರ್ಶನ ಇಲ್ಲಿದೆ.]*\n\n"
+            "*ಸ್ಥಳೀಯ AI ತಾತ್ಕಾಲಿಕವಾಗಿ ಲಭ್ಯವಿಲ್ಲ. ಈ ಉತ್ತರ LegalSaathiಯ ಪರಿಶೀಲಿತ ಕಾನೂನು ಡೇಟಾಬೇಸ್ ಆಧಾರಿತವಾಗಿದೆ.*\n\n"
         )
 
         if not retrieved_sources:

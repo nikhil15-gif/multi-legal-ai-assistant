@@ -17,6 +17,22 @@ export async function sendChatMessage(query, language = 'auto', history = []) {
   return response.json();
 }
 
+export async function transcribeAudioRecording(audioBlob, language = 'auto') {
+  const formData = new FormData();
+  const extension = audioBlob.type.includes('mp4') ? 'mp4' : 'webm';
+  formData.append('file', audioBlob, `voice-question.${extension}`);
+
+  const response = await fetch(`${API_BASE}/speech/transcribe?language=${encodeURIComponent(language)}`, {
+    method: 'POST',
+    body: formData
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.detail || 'Local voice recognition failed. Please try again or type your question.');
+  }
+  return data;
+}
+
 export async function fetchAiStatus() {
   const response = await fetch(`${API_BASE}/ai/status`);
   if (!response.ok) throw new Error('Failed to fetch AI provider status');

@@ -1,10 +1,21 @@
-import React, { useState } from 'react';
-import { Scale, User, Copy, Check, ExternalLink, Sparkles, BookOpen, AlertCircle } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Scale, Copy, Check, Sparkles, BookOpen, AlertCircle, Volume2, VolumeX } from 'lucide-react';
 import SourceCard from './SourceCard';
+import MarkdownContent from './MarkdownContent';
 
 export default function ChatMessage({ message, onSelectFollowUp }) {
   const isUser = message.role === 'user';
   const [copied, setCopied] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const modelLabel = /knowledge base fallback|grounded-kb-synthesizer/i.test(message.modelUsed || '')
+    ? 'Verified legal knowledge base'
+    : message.modelUsed;
+
+  useEffect(() => () => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+  }, []);
 
   const handleCopy = () => {
     if (message.content) {
@@ -12,6 +23,32 @@ export default function ChatMessage({ message, onSelectFollowUp }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
+  };
+
+  const handleSpeak = () => {
+    const speech = window.speechSynthesis;
+    if (!speech || !message.content) return;
+    if (isSpeaking) {
+      speech.cancel();
+      setIsSpeaking(false);
+      return;
+    }
+
+    speech.cancel();
+    const plainText = String(message.content)
+      .replace(/```[\s\S]*?```/g, ' ')
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '$1')
+      .replace(/https?:\/\/\S+/g, ' ')
+      .replace(/[*_~`>#]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const utterance = new SpeechSynthesisUtterance(plainText);
+    utterance.lang = { hi: 'hi-IN', kn: 'kn-IN' }[message.language] || 'en-IN';
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    speech.speak(utterance);
   };
 
   if (isUser) {
@@ -38,9 +75,9 @@ export default function ChatMessage({ message, onSelectFollowUp }) {
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
           <div className="flex items-center space-x-2">
             <span className="text-xs font-bold text-slate-900 dark:text-white">LegalSaathi AI</span>
-            {message.modelUsed && (
+            {modelLabel && (
               <span className="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
-                {message.modelUsed}
+                {modelLabel}
               </span>
             )}
             {message.language && (
@@ -50,14 +87,27 @@ export default function ChatMessage({ message, onSelectFollowUp }) {
             )}
           </div>
 
-          <button
-            onClick={handleCopy}
-            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-md transition flex items-center space-x-1 text-xs"
-            title="Copy answer"
-          >
-            {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-            <span>{copied ? 'Copied' : 'Copy'}</span>
-          </button>
+          <div className="flex items-center gap-2">
+            {typeof window !== 'undefined' && 'speechSynthesis' in window && (
+              <button
+                onClick={handleSpeak}
+                className="text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 p-1 rounded-md transition flex items-center space-x-1 text-xs"
+                title={isSpeaking ? 'Stop speaking' : 'Read answer aloud'}
+                aria-label={isSpeaking ? 'Stop speaking' : 'Read answer aloud'}
+              >
+                {isSpeaking ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                <span>{isSpeaking ? 'Stop' : 'Listen'}</span>
+              </button>
+            )}
+            <button
+              onClick={handleCopy}
+              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-md transition flex items-center space-x-1 text-xs"
+              title="Copy answer"
+            >
+              {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copied ? 'Copied' : 'Copy'}</span>
+            </button>
+          </div>
         </div>
 
         {/* Emergency Alert Box inside message if present */}
@@ -72,8 +122,8 @@ export default function ChatMessage({ message, onSelectFollowUp }) {
         )}
 
         {/* Formatted Answer Body */}
-        <div className="text-sm text-slate-800 dark:text-slate-200 leading-relaxed space-y-2 whitespace-pre-wrap">
-          {message.content}
+        <div className="text-sm text-slate-800 dark:text-slate-200 leading-relaxed">
+          <MarkdownContent content={message.content} />
         </div>
 
         {/* Verified Sources Accordion */}

@@ -51,6 +51,8 @@ class DocumentService:
         valid, msg = self.validate_file(filename, len(content))
         if not valid:
             return {"success": False, "error": msg}
+        if not content:
+            return {"success": False, "error": "The uploaded file is empty."}
 
         ext = os.path.splitext(filename)[1].lower()
         doc_id = str(uuid.uuid4())[:8]
@@ -76,6 +78,18 @@ class DocumentService:
 
         # Sanitize against prompt injections
         sanitized_text = sanitize_document_content(extracted_text)
+        if not sanitized_text.strip():
+            if ext == ".pdf" and not ocr_service.is_available():
+                return {
+                    "success": False,
+                    "error": "This PDF has no selectable text and OCR is not available. Install Tesseract OCR and restart the backend."
+                }
+            if ext == ".pdf":
+                return {
+                    "success": False,
+                    "error": "No readable text could be extracted from this PDF. It may be blank, encrypted, or too blurry for OCR."
+                }
+            return {"success": False, "error": "No readable text was found in this file. For scanned PDFs, make sure Tesseract OCR is installed and configured."}
         preview = sanitized_text[:300] + ("..." if len(sanitized_text) > 300 else "")
 
         # Store in memory
@@ -118,7 +132,8 @@ class DocumentService:
                         text_parts.append(f"[Page {page_idx+1}]\n{page_text}")
                     elif ocr_service.is_available():
                         # Scanned PDF page: attempt pixmap OCR
-                        pix = page.get_pixmap()
+                        # Render scanned pages at a more OCR-friendly resolution.
+                        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
                         img_bytes = pix.tobytes("png")
                         ocr_res = ocr_service.extract_text_from_image_bytes(img_bytes)
                         if ocr_res["success"]:
@@ -176,12 +191,17 @@ class DocumentService:
         if not top_context.strip():
             top_context = text[:800]
 
-        answer = (
-            f"Based on your uploaded document (**{doc['filename']}**):\n\n"
-            f"**Relevant Excerpts:**\n> {top_context[:600]}...\n\n"
-            f"**Analysis:** The document addresses terms related to '{question}'. "
-            "Please review the highlighted provisions and ensure all obligations, dates, and liability caps are verified."
-        )
+        if excerpts:
+            answer = (
+                f"Based on the text extracted from **{doc['filename']}**, these passages may be relevant:\n\n"
+                + "\n\n".join(f"> {excerpt}" for excerpt in excerpts)
+                + "\n\nThis is an extractive result, not a legal interpretation. Check the full clause and surrounding pages; OCR or text extraction may omit context."
+            )
+        else:
+            answer = (
+                f"I could not find a passage in **{doc['filename']}** that clearly answers this question. "
+                "The document text may use different wording, or extraction may have missed the relevant section. Please review the full document."
+            )
 
         return {
             "success": True,
@@ -226,23 +246,21 @@ class DocumentService:
         else:
             parties = ["Identified in document preamble"]
 
-        # Obligations & Risks
-        obligations = [
-            "Parties must comply with written notice periods specified in termination clauses.",
-            "Timely payments and indemnification clauses apply upon default.",
-            "Dispute resolution must follow designated jurisdiction/arbitration mechanisms."
-        ]
-
-        risks = [
-            "Check for unilateral termination or forfeiture clauses.",
-            "Verify whether dispute jurisdiction is located in your local district court.",
-            "Ensure stamp duty and notarization/registration requirements are met."
-        ]
+        # Report only clauses present in the extracted text. These are search
+        # leads, not conclusions about enforceability or legal effect.
+        clauses = [part.strip() for part in re.split(r"(?<=[.!?])\s+|\n+", text) if part.strip()]
+        obligation_terms = re.compile(r"\b(shall|must|agrees? to|is required to|will pay|liable to|undertakes? to)\b", re.I)
+        caution_terms = re.compile(r"\b(terminate|termination|penalty|forfeit|forfeiture|indemnif|liabilit|arbitrat|jurisdiction|notice period|default)\w*\b", re.I)
+        obligations = list(dict.fromkeys(sentence for sentence in clauses if obligation_terms.search(sentence)))[:6]
+        risks = list(dict.fromkeys(sentence for sentence in clauses if caution_terms.search(sentence)))[:6]
+        if not obligations:
+            obligations = ["No clear obligation wording was identified in the extracted text."]
+        if not risks:
+            risks = ["No specific risk clause was identified by the text scan. Review the complete document and seek qualified advice where needed."]
 
         summary = (
             f"This document is classified as a **{doc_type}** spanning {doc['page_count']} page(s) and {doc['length']} characters. "
-            f"Key provisions govern contractual commitments, payment schedules, and liability boundaries. "
-            "Examine the specific clauses below for rights and obligations."
+            "The items below are passages selected from the extracted text for review; they do not determine legal effect or enforceability."
         )
 
         return {

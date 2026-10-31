@@ -1,98 +1,134 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { transcribeAudioRecording } from '../services/api';
 
-/**
- * Custom hook for browser speech recognition.
- * Maps application language to Indian localized speech recognition tags.
- */
-export function useSpeechRecognition(language = 'en') {
+/** Records a short voice query and transcribes it with the local backend model. */
+export function useSpeechRecognition(language = 'auto') {
   const [isListening, setIsListening] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcript, setTranscript] = useState('');
+  const [transcriptLanguage, setTranscriptLanguage] = useState(null);
   const [error, setError] = useState(null);
-  const recognitionRef = useRef(null);
+  const recorderRef = useRef(null);
+  const streamRef = useRef(null);
+  const chunksRef = useRef([]);
+  const timeoutRef = useRef(null);
 
-  const isSupported = typeof window !== 'undefined' &&
-    ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window);
+  const isSupported = typeof window !== 'undefined'
+    && typeof MediaRecorder !== 'undefined'
+    && Boolean(navigator.mediaDevices?.getUserMedia);
 
-  // Map app language code to BCP 47 locale tag
-  const getLocaleTag = (lang) => {
-    switch (lang) {
-      case 'hi': return 'hi-IN';
-      case 'kn': return 'kn-IN';
-      default: return 'en-IN';
+  const clearRecordingResources = useCallback(() => {
+    if (timeoutRef.current) {
+      window.clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
     }
-  };
+    const recorder = recorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.onstop = null;
+      recorder.onerror = null;
+      recorder.stop();
+    }
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    recorderRef.current = null;
+  }, []);
+
+  useEffect(() => () => {
+    clearRecordingResources();
+  }, [clearRecordingResources]);
 
   useEffect(() => {
-    if (!isSupported) return;
+    if (!error) return undefined;
+    const timer = window.setTimeout(() => setError(null), 10000);
+    return () => window.clearTimeout(timer);
+  }, [error]);
 
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.lang = getLocaleTag(language);
-
-    recognition.onresult = (event) => {
-      let currentTranscript = '';
-      for (let i = 0; i < event.results.length; i++) {
-        currentTranscript += event.results[i][0].transcript;
-      }
-      setTranscript(currentTranscript);
-    };
-
-    recognition.onerror = (event) => {
-      console.warn("Speech recognition error:", event.error);
-      if (event.error === 'not-allowed') {
-        setError('Microphone permission denied. Please allow microphone access in your browser settings.');
-      } else if (event.error === 'no-speech') {
-        setError('No speech was detected. Please try again.');
-      } else {
-        setError(`Speech recognition error: ${event.error}`);
-      }
-      setIsListening(false);
-    };
-
-    recognition.onend = () => {
-      setIsListening(false);
-    };
-
-    recognitionRef.current = recognition;
-
-    return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.abort();
-      }
-    };
-  }, [language, isSupported]);
-
-  const startListening = useCallback(() => {
+  const startListening = useCallback(async () => {
     setError(null);
     setTranscript('');
+    setTranscriptLanguage(null);
     if (!isSupported) {
-      setError('Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.');
+      setError('Microphone recording is unavailable in this browser. Open the app on localhost or HTTPS and try a current Chrome or Edge browser.');
       return;
     }
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.lang = getLocaleTag(language);
-        recognitionRef.current.start();
-        setIsListening(true);
-      } catch (err) {
-        console.warn("Speech recognition start failed:", err);
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      });
+      streamRef.current = stream;
+
+      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+        .find((type) => MediaRecorder.isTypeSupported(type));
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      recorderRef.current = recorder;
+      chunksRef.current = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data?.size) chunksRef.current.push(event.data);
+      };
+      recorder.onerror = () => {
+        setError('The microphone recording failed. Check microphone access and try again.');
+        setIsListening(false);
+        setIsTranscribing(false);
+        clearRecordingResources();
+      };
+      recorder.onstop = async () => {
+        const audioBlob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+        chunksRef.current = [];
+        setIsListening(false);
+        clearRecordingResources();
+        if (!audioBlob.size) {
+          setError('No audio was recorded. Allow microphone access, then try again.');
+          return;
+        }
+
+        setIsTranscribing(true);
+        try {
+          const result = await transcribeAudioRecording(audioBlob, language);
+          if (!result.text?.trim()) throw new Error('No speech was detected. Please try again.');
+          setTranscript(result.text.trim());
+          setTranscriptLanguage(result.language || 'en');
+        } catch (err) {
+          setError(err.message || 'Local voice recognition failed. Please try again or type your question.');
+        } finally {
+          setIsTranscribing(false);
+        }
+      };
+
+      recorder.start(250);
+      setIsListening(true);
+      // Keep recordings short so questions transcribe quickly and uploads stay small.
+      timeoutRef.current = window.setTimeout(() => {
+        if (recorder.state === 'recording') recorder.stop();
+      }, 45000);
+    } catch (err) {
+      clearRecordingResources();
+      setIsListening(false);
+      if (err.name === 'NotAllowedError' || err.name === 'SecurityError') {
+        setError('Allow microphone access for this site in your browser, then press the mic again.');
+      } else if (err.name === 'NotFoundError') {
+        setError('No microphone was found. Connect a microphone or type your question.');
+      } else {
+        setError('Could not start microphone recording. Check microphone access and try again.');
       }
     }
-  }, [language, isSupported]);
+  }, [clearRecordingResources, isSupported, language]);
 
   const stopListening = useCallback(() => {
-    if (recognitionRef.current && isListening) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-    }
-  }, [isListening]);
+    const recorder = recorderRef.current;
+    if (recorder?.state === 'recording') recorder.stop();
+  }, []);
+
+  const clearError = useCallback(() => setError(null), []);
 
   return {
     isListening,
+    isTranscribing,
     transcript,
+    transcriptLanguage,
     error,
+    clearError,
     isSupported,
     startListening,
     stopListening

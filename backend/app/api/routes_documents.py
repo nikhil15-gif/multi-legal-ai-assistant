@@ -10,7 +10,7 @@ from app.models.schemas import (
     DocumentSummarizeRequest,
     DocumentSummarizeResponse
 )
-from app.services.document_service import document_service
+from app.services.document_service import document_service, MAX_FILE_SIZE_BYTES
 
 router = APIRouter(prefix="/api/documents", tags=["Documents"])
 
@@ -21,7 +21,11 @@ async def upload_document(file: UploadFile = File(...)):
     Extracts text, strips unsafe prompt injections, and indexes in session.
     """
     try:
-        content = await file.read()
+        # Read at most the configured limit plus one byte so an oversized
+        # multipart upload cannot be fully buffered before validation.
+        content = await file.read(MAX_FILE_SIZE_BYTES + 1)
+        if len(content) > MAX_FILE_SIZE_BYTES:
+            raise HTTPException(status_code=413, detail="File size exceeds maximum limit of 10MB.")
         result = document_service.process_upload(file.filename, content)
         if not result["success"]:
             raise HTTPException(status_code=400, detail=result["error"])

@@ -18,6 +18,7 @@ async def get_ai_status():
     return AIStatusResponse(
         provider=status["provider"],
         ollama_reachable=status["ollama_reachable"],
+        target_model_installed=status["target_model_installed"],
         ollama_models=status["ollama_models"],
         active_model=status["active_model"],
         is_ready=status["is_ready"],

@@ -139,6 +139,9 @@ export default function SettingsPage({
             <p className="font-bold text-slate-800 dark:text-slate-200 mt-1">
               {aiStatus?.active_model || 'llama3.1:latest'}
             </p>
+            <p className="text-[11px] text-slate-500 mt-1">
+              {aiStatus?.target_model_installed ? 'Installed and ready' : aiStatus?.ollama_reachable ? 'Not installed yet' : 'Waiting for Ollama'}
+            </p>
           </div>
 
           <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700">

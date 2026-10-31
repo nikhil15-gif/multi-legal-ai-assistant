@@ -49,6 +49,28 @@ FOLLOW_UP_TEMPLATES = {
 }
 
 class TranslationService:
+    @staticmethod
+    def _looks_like_romanized_kannada(text: str) -> bool:
+        """Recognize common Kannada words when a speech engine returns Latin text."""
+        normalized = re.sub(r"[^a-z\s]", " ", text.lower())
+        words = set(normalized.split())
+        kannada_roots = {
+            "nanu", "nanage", "nanna", "nimma", "nimage", "enu", "yenu",
+            "yaava", "yava", "yav", "beku", "bekaa", "bekagide", "maadu",
+            "madid", "maadid", "nodi", "nod", "hege", "hakku", "kanunu",
+            "kanoonu", "duru", "dayavittu", "illa", "ide", "iddare", "yaavyaavu",
+        }
+        matches = sum(
+            1
+            for word in words
+            if any(word == root or (len(root) >= 4 and word.startswith(root)) for root in kannada_roots)
+        )
+        # Two recognised roots avoids treating ordinary English as Kannada.
+        return matches >= 2 or (
+            any(word.startswith("bekaa") for word in words)
+            and any(word.startswith("yav") for word in words)
+        )
+
     def detect_language(self, text: str) -> str:
         """
         Detects whether text is in Kannada ('kn'), Hindi ('hi'), or English ('en').
@@ -65,6 +87,8 @@ class TranslationService:
             return "kn"
         elif devanagari_chars > 0 and devanagari_chars > kannada_chars:
             return "hi"
+        elif self._looks_like_romanized_kannada(text):
+            return "kn"
         return "en"
 
     def resolve_language(self, user_language_pref: Optional[str], text: str) -> Tuple[str, str]:

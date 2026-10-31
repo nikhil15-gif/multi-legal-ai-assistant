@@ -15,6 +15,7 @@ from app.api.routes_chat import router as chat_router
 from app.api.routes_legal import router as legal_router
 from app.api.routes_documents import router as documents_router
 from app.api.routes_ai import router as ai_router
+from app.api.routes_speech import router as speech_router
 from app.services.legal_retrieval import legal_retrieval_service
 from app.services.ai_service import ai_service
 from app.utils.logger import logger
@@ -39,6 +40,7 @@ app.include_router(chat_router)
 app.include_router(legal_router)
 app.include_router(documents_router)
 app.include_router(ai_router)
+app.include_router(speech_router)
 
 @app.get("/")
 async def root():

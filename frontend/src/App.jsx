@@ -33,6 +33,8 @@ export default function App() {
       setAiStatus({
         provider: 'ollama',
         ollama_reachable: false,
+        target_model_installed: false,
+        is_ready: false,
         active_model: 'llama3.1:latest',
         error: 'Backend is starting up or offline'
       });
@@ -41,6 +43,8 @@ export default function App() {
 
   useEffect(() => {
     loadAiStatus();
+    const statusTimer = window.setInterval(loadAiStatus, 15000);
+    return () => window.clearInterval(statusTimer);
   }, []);
 
   const handleStartChatWithPrompt = (promptText) => {
