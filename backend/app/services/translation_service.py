@@ -63,6 +63,12 @@ class TranslationService:
             "sahaya", "yaake", "ellide", "elli", "maadi", "madabeku", "madbeku",
             "maadbeku", "agide", "avaru", "nange", "kodabeku", "kodbeku", "sambala",
             "vetana", "sigalilla", "sigilla",
+            # Common Latin spellings Whisper emits for conversational Kannada.
+            # These cover the user's reported "ishtu dinegara ..." style output.
+            "ishtu", "dina", "dinagala", "aaga", "aadaga", "aga", "aag",
+            "kaddaya", "kadday", "kadhi", "kaara", "sallu", "salla", "sallisu",
+            "yavaga", "yavag", "barutte", "baruttade", "agutte", "aagutte",
+            "bekalla", "madalla", "helid", "helbeku", "tumba", "illaandre",
         }
         matches = sum(
             1
