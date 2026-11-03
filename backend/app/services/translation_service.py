@@ -4,6 +4,7 @@ Supports English, Hindi, and Kannada with statutory terminology preservation.
 """
 
 import re
+import unicodedata
 from typing import Tuple, List, Optional
 from app.utils.logger import logger
 
@@ -59,6 +60,9 @@ class TranslationService:
             "yaava", "yava", "yav", "beku", "bekaa", "bekagide", "maadu",
             "madid", "maadid", "nodi", "nod", "hege", "hakku", "kanunu",
             "kanoonu", "duru", "dayavittu", "illa", "ide", "iddare", "yaavyaavu",
+            "sahaya", "yaake", "ellide", "elli", "maadi", "madabeku", "madbeku",
+            "maadbeku", "agide", "avaru", "nange", "kodabeku", "kodbeku", "sambala",
+            "vetana", "sigalilla", "sigilla",
         }
         matches = sum(
             1
@@ -70,6 +74,28 @@ class TranslationService:
             any(word.startswith("bekaa") for word in words)
             and any(word.startswith("yav") for word in words)
         )
+
+    @staticmethod
+    def _looks_like_romanized_hindi(text: str) -> bool:
+        """Recognize common Hindi transliteration returned by speech-to-text."""
+        normalized = re.sub(r"[^a-z\s]", " ", text.lower())
+        words = set(normalized.split())
+        hindi_roots = {
+            "kya", "kyun", "kaise", "kab", "kahan", "kis", "mujhe", "mujhko",
+            "mera", "meri", "mere", "aap", "aapko", "apne", "tum", "hum",
+            "hain", "hai", "nahi", "nahin", "chahiye", "adhikar", "kanun",
+            "kanoon", "madad", "paisa", "paise", "karu", "karein", "karen",
+        }
+        distinctive_roots = {
+            "kya", "kyun", "kaise", "kab", "kahan", "kis", "mujhe", "mujhko",
+            "mera", "meri", "mere", "aap", "aapko", "nahi", "nahin", "chahiye",
+        }
+        matches = {
+            word
+            for word in words
+            if any(word == root or (len(root) >= 4 and word.startswith(root)) for root in hindi_roots)
+        }
+        return len(matches) >= 2 and bool(matches & distinctive_roots)
 
     def detect_language(self, text: str) -> str:
         """
@@ -89,7 +115,38 @@ class TranslationService:
             return "hi"
         elif self._looks_like_romanized_kannada(text):
             return "kn"
+        elif self._looks_like_romanized_hindi(text):
+            return "hi"
         return "en"
+
+    @staticmethod
+    def answer_matches_language(text: str, language: str) -> bool:
+        """Check that a generated answer substantially uses the requested script."""
+        if language not in {"hi", "kn"}:
+            return True
+
+        pattern = r"[\u0900-\u097F]" if language == "hi" else r"[\u0C80-\u0CFF]"
+        target_chars = len(re.findall(pattern, text or ""))
+        latin_chars = len(re.findall(r"[a-zA-Z]", text or ""))
+        return target_chars >= 3 and target_chars / max(target_chars + latin_chars, 1) >= 0.25
+
+    @staticmethod
+    def has_native_script(text: str, language: str) -> bool:
+        """Return whether Hindi/Kannada text is actually written in its script."""
+        pattern = r"[\u0900-\u097F]" if language == "hi" else r"[\u0C80-\u0CFF]"
+        target_chars = len(re.findall(pattern, text or ""))
+        latin_chars = len(re.findall(r"[a-zA-Z]", text or ""))
+        return target_chars >= 2 and target_chars / max(target_chars + latin_chars, 1) >= 0.25
+
+    @staticmethod
+    def contains_unsupported_script(text: str) -> bool:
+        """Detect alphabetic scripts outside this app's English/Hindi/Kannada support."""
+        supported_script_names = ("LATIN", "DEVANAGARI", "KANNADA")
+        return any(
+            character.isalpha()
+            and not any(script_name in unicodedata.name(character, "") for script_name in supported_script_names)
+            for character in (text or "")
+        )
 
     def resolve_language(self, user_language_pref: Optional[str], text: str) -> Tuple[str, str]:
         """

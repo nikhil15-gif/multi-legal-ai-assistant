@@ -3,8 +3,10 @@ import { transcribeAudioRecording } from '../services/api';
 
 /** Records a short voice query and transcribes it with the local backend model. */
 export function useSpeechRecognition(language = 'auto') {
+  const [isStarting, setIsStarting] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [microphonePermission, setMicrophonePermission] = useState('unknown');
   const [transcript, setTranscript] = useState('');
   const [transcriptLanguage, setTranscriptLanguage] = useState(null);
   const [error, setError] = useState(null);
@@ -38,6 +40,26 @@ export function useSpeechRecognition(language = 'auto') {
   }, [clearRecordingResources]);
 
   useEffect(() => {
+    if (!navigator.permissions?.query) return undefined;
+    let mounted = true;
+    let permissionStatus;
+    navigator.permissions.query({ name: 'microphone' })
+      .then((status) => {
+        if (!mounted) return;
+        permissionStatus = status;
+        setMicrophonePermission(status.state);
+        status.onchange = () => setMicrophonePermission(status.state);
+      })
+      .catch(() => {
+        // Some browsers do not expose microphone permission state until a request is made.
+      });
+    return () => {
+      mounted = false;
+      if (permissionStatus) permissionStatus.onchange = null;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!error) return undefined;
     const timer = window.setTimeout(() => setError(null), 10000);
     return () => window.clearTimeout(timer);
@@ -53,9 +75,12 @@ export function useSpeechRecognition(language = 'auto') {
     }
 
     try {
+      setIsStarting(true);
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
       });
+      setIsStarting(false);
+      setMicrophonePermission('granted');
       streamRef.current = stream;
 
       const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
@@ -103,9 +128,11 @@ export function useSpeechRecognition(language = 'auto') {
         if (recorder.state === 'recording') recorder.stop();
       }, 45000);
     } catch (err) {
+      setIsStarting(false);
       clearRecordingResources();
       setIsListening(false);
       if (err.name === 'NotAllowedError' || err.name === 'SecurityError') {
+        setMicrophonePermission('denied');
         setError('Allow microphone access for this site in your browser, then press the mic again.');
       } else if (err.name === 'NotFoundError') {
         setError('No microphone was found. Connect a microphone or type your question.');
@@ -123,8 +150,10 @@ export function useSpeechRecognition(language = 'auto') {
   const clearError = useCallback(() => setError(null), []);
 
   return {
+    isStarting,
     isListening,
     isTranscribing,
+    microphonePermission,
     transcript,
     transcriptLanguage,
     error,

@@ -3,6 +3,7 @@ Document Processing and OCR API Router for LegalSaathi AI.
 """
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
+from starlette.concurrency import run_in_threadpool
 from app.models.schemas import (
     DocumentUploadResponse,
     DocumentAskRequest,
@@ -26,7 +27,7 @@ async def upload_document(file: UploadFile = File(...)):
         content = await file.read(MAX_FILE_SIZE_BYTES + 1)
         if len(content) > MAX_FILE_SIZE_BYTES:
             raise HTTPException(status_code=413, detail="File size exceeds maximum limit of 10MB.")
-        result = document_service.process_upload(file.filename, content)
+        result = await run_in_threadpool(document_service.process_upload, file.filename, content)
         if not result["success"]:
             raise HTTPException(status_code=400, detail=result["error"])
 
@@ -49,7 +50,12 @@ async def upload_document(file: UploadFile = File(...)):
 @router.post("/ask", response_model=DocumentAskResponse)
 async def ask_about_document(request: DocumentAskRequest):
     """Answers questions based exclusively on the uploaded document's text."""
-    result = document_service.ask_document(request.doc_id, request.question, request.language or "en")
+    result = await run_in_threadpool(
+        document_service.ask_document,
+        request.doc_id,
+        request.question,
+        request.language or "en",
+    )
     if not result["success"]:
         raise HTTPException(status_code=404, detail=result["error"])
 
@@ -65,7 +71,11 @@ async def ask_about_document(request: DocumentAskRequest):
 @router.post("/summarize", response_model=DocumentSummarizeResponse)
 async def summarize_document(request: DocumentSummarizeRequest):
     """Summarizes legal document into nature, parties, obligations, and risks."""
-    result = document_service.summarize_document(request.doc_id, request.language or "en")
+    result = await run_in_threadpool(
+        document_service.summarize_document,
+        request.doc_id,
+        request.language or "en",
+    )
     if not result["success"]:
         raise HTTPException(status_code=404, detail=result["error"])
 

@@ -94,7 +94,7 @@ class DocumentUploadResponse(BaseModel):
 class DocumentAskRequest(BaseModel):
     doc_id: str
     question: str = Field(..., min_length=1)
-    language: Optional[str] = "en"
+    language: Optional[str] = "auto"
 
 
 class DocumentAskResponse(BaseModel):

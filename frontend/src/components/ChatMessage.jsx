@@ -7,14 +7,22 @@ export default function ChatMessage({ message, onSelectFollowUp }) {
   const isUser = message.role === 'user';
   const [copied, setCopied] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speechPlaybackError, setSpeechPlaybackError] = useState('');
+  const [speechVoices, setSpeechVoices] = useState([]);
   const modelLabel = /knowledge base fallback|grounded-kb-synthesizer/i.test(message.modelUsed || '')
     ? 'Verified legal knowledge base'
     : message.modelUsed;
 
-  useEffect(() => () => {
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return undefined;
+    const speech = window.speechSynthesis;
+    const updateVoices = () => setSpeechVoices(speech.getVoices());
+    updateVoices();
+    speech.addEventListener?.('voiceschanged', updateVoices);
+    return () => {
+      speech.removeEventListener?.('voiceschanged', updateVoices);
+      speech.cancel();
+    };
   }, []);
 
   const handleCopy = () => {
@@ -28,6 +36,7 @@ export default function ChatMessage({ message, onSelectFollowUp }) {
   const handleSpeak = () => {
     const speech = window.speechSynthesis;
     if (!speech || !message.content) return;
+    setSpeechPlaybackError('');
     if (isSpeaking) {
       speech.cancel();
       setIsSpeaking(false);
@@ -45,9 +54,28 @@ export default function ChatMessage({ message, onSelectFollowUp }) {
       .trim();
     const utterance = new SpeechSynthesisUtterance(plainText);
     utterance.lang = { hi: 'hi-IN', kn: 'kn-IN' }[message.language] || 'en-IN';
+    const languageCode = (message.language || 'en').toLowerCase();
+    const availableVoices = speechVoices.length ? speechVoices : speech.getVoices();
+    const matchingVoice = availableVoices.find((voice) => voice.lang.toLowerCase() === utterance.lang.toLowerCase())
+      || availableVoices.find((voice) => voice.lang.toLowerCase().split('-')[0] === languageCode);
+    if (!availableVoices.length) {
+      setSpeechPlaybackError('Browser speech voices are still loading. Wait a moment, then tap Listen again.');
+      return;
+    }
+    if (availableVoices.length && !matchingVoice) {
+      const languageName = { en: 'English', hi: 'Hindi', kn: 'Kannada' }[languageCode] || 'requested language';
+      setSpeechPlaybackError(`No ${languageName} speech voice is available in this browser. Add that voice in your device settings, then try again.`);
+      return;
+    }
+    if (matchingVoice) utterance.voice = matchingVoice;
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
+    utterance.onerror = (event) => {
+      setIsSpeaking(false);
+      if (event.error !== 'canceled' && event.error !== 'interrupted') {
+        setSpeechPlaybackError('Audio playback could not start. Check your device sound and browser speech settings.');
+      }
+    };
     speech.speak(utterance);
   };
 
@@ -122,6 +150,11 @@ export default function ChatMessage({ message, onSelectFollowUp }) {
         )}
 
         {/* Formatted Answer Body */}
+        {speechPlaybackError && (
+          <p role="status" className="text-xs text-amber-700 dark:text-amber-300">
+            {speechPlaybackError}
+          </p>
+        )}
         <div className="text-sm text-slate-800 dark:text-slate-200 leading-relaxed">
           <MarkdownContent content={message.content} />
         </div>

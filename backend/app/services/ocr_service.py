@@ -134,7 +134,10 @@ class OCRService:
                 return {
                     "success": False,
                     "text": "",
-                    "error": "No legible text could be extracted from the uploaded image. Please ensure the image is clear and well-lit."
+                    "error": (
+                        "No legible text could be extracted from the uploaded image. Use a clear, well-lit image. "
+                        "For Hindi or Kannada, install the hin or kan Tesseract language data and try again."
+                    )
                 }
 
             return {

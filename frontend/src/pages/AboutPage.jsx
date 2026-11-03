@@ -9,7 +9,8 @@ import {
   AlertTriangle, 
   Workflow, 
   Binary,
-  Code2
+  Code2,
+  ExternalLink
 } from 'lucide-react';
 
 export default function AboutPage() {
@@ -130,13 +131,37 @@ export default function AboutPage() {
           </li>
           <li className="flex items-start">
             <CheckCircle2 className="w-4 h-4 text-emerald-500 mr-2 flex-shrink-0 mt-0.5" />
-            <span><strong>Strict Grounding & Zero Hallucination:</strong> If knowledge base lacks coverage, the system explicitly acknowledges limitations instead of inventing non-existent court judgments or fake section numbers.</span>
+            <span><strong>Grounding & Hallucination Risk Controls:</strong> Retrieved legal sources and an explicit no-match fallback help limit unsupported answers, but they cannot guarantee that every generated answer is free of errors.</span>
           </li>
           <li className="flex items-start">
             <CheckCircle2 className="w-4 h-4 text-emerald-500 mr-2 flex-shrink-0 mt-0.5" />
             <span><strong>Emergency Interception:</strong> Detects immediate domestic abuse, physical danger, or cyber banking fraud and surfaces verified 24x7 toll-free government hotlines (112, 1091, 1930, 15100).</span>
           </li>
         </ul>
+
+        <div className="rounded-xl border border-teal-200 dark:border-teal-900 bg-teal-50/70 dark:bg-teal-950/30 p-4 space-y-2">
+          <div className="flex items-center gap-2 text-teal-800 dark:text-teal-300">
+            <BookOpen className="w-4 h-4 flex-shrink-0" />
+            <h3 className="text-sm font-bold">Recent Related Research · 2026 preprint</h3>
+          </div>
+          <p className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100">
+            Rhetorical-Role-Aware Retrieval-Augmented Generation for Legal Question Answering over Indian Supreme Court Judgments
+          </p>
+          <p className="text-xs text-slate-600 dark:text-slate-300">
+            Sayed Ayaan Ahmed Sha, Sangeetha Sivanesan, Anand Kumar Madasamy, and Navya Binu · 7 August 2026 · arXiv:2608.06828.
+          </p>
+          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+            The paper studies rhetorical-role chunking, hybrid retrieval, intent-aware filtering, and reranking over 30 Indian Supreme Court judgments. Its reported evaluation uses automated LLM metrics and is limited to that corpus. It does not validate LegalSaathi AI or its Hindi and Kannada responses; it is a related-work reference, not proof of this project’s legal accuracy.
+          </p>
+          <a
+            href="https://arxiv.org/abs/2608.06828"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-900 dark:text-teal-300 dark:hover:text-teal-100"
+          >
+            Read the paper on arXiv <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        </div>
       </section>
 
       {/* Limitations & Future Work */}

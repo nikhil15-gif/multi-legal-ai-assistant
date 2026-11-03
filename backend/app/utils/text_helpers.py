@@ -41,7 +41,7 @@ def extract_relevant_excerpts(text: str, query: str, max_excerpts: int = 3, max_
     # Break into sentences or paragraphs
     paragraphs = [p.strip() for p in re.split(r"\n\s*\n|\.\s+", text) if len(p.strip()) > 30]
     if not paragraphs:
-        return [text[:max_chars]]
+        return []
 
     query_words = set(re.findall(r"\w+", query.lower()))
     scored_paragraphs = []
@@ -54,10 +54,7 @@ def extract_relevant_excerpts(text: str, query: str, max_excerpts: int = 3, max_
             scored_paragraphs.append((score, p))
 
     scored_paragraphs.sort(key=lambda x: x[0], reverse=True)
-    results = [p[1][:max_chars] for p in scored_paragraphs[:max_excerpts]]
-    if not results and paragraphs:
-        results = [paragraphs[0][:max_chars]]
-    return results
+    return [p[1][:max_chars] for p in scored_paragraphs[:max_excerpts]]
 
 def extract_legal_terms_explained(text: str) -> List[dict]:
     """

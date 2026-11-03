@@ -76,11 +76,12 @@ export default function ChatPage({
     hi: 'Hindi',
     kn: 'Kannada'
   }[voiceInputLanguage];
-
   // Voice recognition hook
   const {
+    isStarting: isStartingVoice,
     isListening,
     isTranscribing,
+    microphonePermission,
     transcript,
     transcriptLanguage,
     error: speechError,
@@ -89,6 +90,18 @@ export default function ChatPage({
     startListening,
     stopListening
   } = useSpeechRecognition('auto');
+
+  const voiceStatusText = isStartingVoice
+    ? 'Waiting for microphone access. Choose Allow in your browser, then speak.'
+    : isListening
+      ? 'Recording… Speak now, then tap the red microphone to stop and transcribe. Recording stops after 45 seconds.'
+      : isTranscribing
+        ? 'Transcribing locally… Please wait; your transcript will appear in the question box.'
+        : microphonePermission === 'denied'
+          ? 'Microphone access is blocked for this site. Change this site’s microphone permission to Allow, then try again.'
+        : detectedVoiceLanguage
+          ? `Detected ${detectedVoiceLanguage}. Review the transcript in the question box, then press Send.`
+          : 'Tap the microphone to start recording, speak, then tap it again to transcribe. Allow microphone access when asked.';
 
   // Sync voice transcript to input text
   useEffect(() => {
@@ -243,6 +256,16 @@ export default function ChatPage({
     }
   };
 
+  const deleteOlderConversations = () => {
+    const olderConversations = conversations.filter((conversation) => conversation.id !== activeConversationId);
+    if (!olderConversations.length) return;
+    const confirmed = window.confirm(
+      `Delete ${olderConversations.length} older saved chat${olderConversations.length === 1 ? '' : 's'}? Your current chat will be kept. This cannot be undone.`
+    );
+    if (!confirmed) return;
+    setConversations((previous) => previous.filter((conversation) => conversation.id === activeConversationId));
+  };
+
   const saveConversationTitle = (event, conversationId) => {
     event.preventDefault();
     const title = renameDraft.trim();
@@ -339,9 +362,21 @@ export default function ChatPage({
               <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Saved conversations</h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">Stored only in this browser on this device.</p>
             </div>
-            <button type="button" onClick={() => setHistoryOpen(false)} aria-label="Close chat history" className="p-1 rounded text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
-              <X className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={deleteOlderConversations}
+                disabled={!conversations.some((conversation) => conversation.id !== activeConversationId)}
+                aria-label="Delete older chats, keeping the current chat"
+                title="Delete older chats, keeping the current chat"
+                className="p-1.5 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:hover:text-slate-400 disabled:hover:bg-transparent dark:hover:text-red-400 dark:hover:bg-red-950/40"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+              <button type="button" onClick={() => setHistoryOpen(false)} aria-label="Close chat history" className="p-1 rounded text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
           {historyStorageError && (
             <p role="status" className="px-4 py-2 text-xs text-amber-700 dark:text-amber-300">Browser storage is unavailable, so new conversations may not be saved.</p>
@@ -464,6 +499,7 @@ export default function ChatPage({
         >
           {/* Voice Input Button */}
           <VoiceInputButton
+            isStarting={isStartingVoice}
             isListening={isListening}
             isTranscribing={isTranscribing}
             isSupported={speechSupported}
@@ -500,10 +536,12 @@ export default function ChatPage({
           </button>
         </form>
 
-        <p className="text-[11px] text-slate-400 text-center mt-1.5">
-          {detectedVoiceLanguage
-            ? `Detected ${detectedVoiceLanguage}. The answer and voice playback will use ${detectedVoiceLanguage}.`
-            : 'Questions in English, Hindi, or Kannada are answered and read aloud in the same language.'}
+        <p
+          role="status"
+          aria-live="polite"
+          className={`text-[11px] text-center mt-1.5 ${isListening ? 'text-red-600 dark:text-red-400' : isStartingVoice || isTranscribing ? 'text-teal-700 dark:text-teal-300' : 'text-slate-400'}`}
+        >
+          {voiceStatusText}
         </p>
       </div>
     </div>

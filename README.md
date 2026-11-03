@@ -35,6 +35,12 @@ This project engineers an end-to-end multilingual legal assistance platform. It 
 3. **Indic Query Term Expansion:** Heuristic term bridges align colloquial Hindi and Kannada legal concepts (e.g., "ಭೂಮಿ ವಿವಾದ", "ಹದ್ದುಬಸ್ತು", "उपभोक्ता", "एफआईआर") with India Code statutory entries.
 4. **Emergency Interception:** Proactively detects urgent physical danger, abuse, or active financial cyber frauds and surfaces official 24x7 toll-free government hotlines (112, 1091, 1930, 15100).
 
+### Recent Related Research
+
+Sayed Ayaan Ahmed Sha, Sangeetha Sivanesan, Anand Kumar Madasamy, and Navya Binu. (2026). [**Rhetorical-Role-Aware Retrieval-Augmented Generation for Legal Question Answering over Indian Supreme Court Judgments**](https://arxiv.org/abs/2608.06828). arXiv:2608.06828, posted August 7, 2026 (preprint).
+
+The paper explores rhetorical-role chunking, hybrid retrieval, intent-aware filtering, and reranking over 30 Indian Supreme Court judgments. Its reported evaluation uses automated LLM metrics and is limited to that corpus; it does not validate LegalSaathi AI or its Hindi/Kannada performance. This is a current related-work reference, not evidence that this project is legally accurate.
+
 ---
 
 ## 4. System Architecture
@@ -84,13 +90,13 @@ flowchart TD
 | Layer | Technologies Selected | Rationale |
 |---|---|---|
 | **Frontend** | React 18, Vite, Tailwind CSS, Lucide Icons | Modern, lightweight, fast build system, responsive UI across mobile & desktop. |
-| **Voice Input** | MediaRecorder + local Faster-Whisper | English, Hindi, and Kannada speech is transcribed on the local backend; recorded audio is not sent to a speech provider. The multilingual model is downloaded once on first use. |
-| **Voice Output** | Browser Speech Synthesis API | Reads assistant replies aloud using the selected English, Hindi, or Kannada voice available in the browser/operating system. |
+| **Voice Input** | MediaRecorder + local Faster-Whisper | English, Hindi, and Kannada speech is transcribed on the local backend. Hindi/Kannada transcripts are retried when they come back in Latin letters, and the app reports when a native-script transcript could not be produced. |
+| **Voice Output** | Browser Speech Synthesis API | Reads assistant replies using the detected answer language and a matching English, Hindi, or Kannada voice installed in the browser/operating system. |
 | **Chat History** | Browser `localStorage` | Saves up to 50 conversations in the current browser profile on this device; no history account or cloud sync is used. |
 | **Backend** | Python 3.10+, FastAPI, Uvicorn, Pydantic V2 | High-throughput async REST endpoints, automatic OpenAPI documentation, strict schema validation. |
-| **Local AI Engine** | Ollama, Meta Llama 3.1 (8B Parameters) | Runs entirely on user's machine, zero API costs, zero data leakage, high reasoning capacity. |
+| **Local AI Engine** | Ollama, Meta Llama 3.1 (8B Parameters) | Default chat and document analysis run through the local Ollama service. Optional cloud providers can be configured; review the provider setting before using private information. |
 | **Information Retrieval** | Scikit-learn (TF-IDF Vectorizer), Cosine Similarity | Deterministic, ultra-fast (<20ms), easily deployable without heavy vector database overhead. |
-| **Document Processing** | PyMuPDF (`fitz`), Pillow, `pytesseract` | High-fidelity digital PDF extraction and optical character recognition for scanned records. |
+| **Document Processing** | PyMuPDF (`fitz`), Pillow, `pytesseract`, local Ollama | Extracts text, answers questions from matched passages, and generates summaries locally; if the model is offline, it shows a clear extractive fallback. Scanned Hindi/Kannada files need the matching Tesseract language data. |
 | **Knowledge Base** | Curated JSON with India Code primary sources | Structured statutory schemas, verified URLs, multilingual summaries, and effective dates. |
 
 ---

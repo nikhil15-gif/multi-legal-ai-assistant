@@ -15,6 +15,11 @@ SUPPORTED_LANGUAGES = {"en", "hi", "kn"}
 
 
 class LocalSpeechService:
+    _SCRIPT_PROMPTS = {
+        "hi": "हिंदी में देवनागरी लिपि में लिखें।",
+        "kn": "ಕನ್ನಡವನ್ನು ಕನ್ನಡ ಲಿಪಿಯಲ್ಲಿ ಬರೆಯಿರಿ.",
+    }
+
     def __init__(self):
         self._model = None
         self._model_lock = Lock()
@@ -57,7 +62,16 @@ class LocalSpeechService:
             raise ValueError("Audio recording is too large. Please keep it under 20 MB.")
 
         mime_type = (content_type or "").lower()
-        suffix = ".mp4" if "mp4" in mime_type or "m4a" in mime_type else ".webm"
+        if "mp4" in mime_type or "m4a" in mime_type:
+            suffix = ".mp4"
+        elif "wav" in mime_type or "wave" in mime_type:
+            suffix = ".wav"
+        elif "ogg" in mime_type:
+            suffix = ".ogg"
+        elif "flac" in mime_type:
+            suffix = ".flac"
+        else:
+            suffix = ".webm"
         temp_path = None
         try:
             with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_audio:
@@ -70,18 +84,76 @@ class LocalSpeechService:
                 language=None if language == "auto" else language,
                 beam_size=3,
                 vad_filter=True,
+                initial_prompt=self._SCRIPT_PROMPTS.get(language),
             )
             text = " ".join(segment.text.strip() for segment in segments if segment.text.strip()).strip()
             detected_from_audio = transcription_info.language
             detected_from_text = translation_service.detect_language(text)
-            # Whisper can label Kannada speech as English when it emits a Latin
-            # transliteration. Prefer the Kannada text signal in that case.
-            if detected_from_audio not in CHAT_LANGUAGES or (
-                detected_from_audio == "en" and detected_from_text == "kn"
-            ):
+
+            # The detected script is strongest when the recognizer wrote Hindi
+            # or Kannada natively. Romanized Hindi/Kannada detection is useful
+            # for choosing a retry, but that Latin text must never be shown as
+            # the final transcript for those languages.
+            if language != "auto":
+                detected_language = language
+                retry_language = language
+            elif detected_from_text in {"hi", "kn"}:
                 detected_language = detected_from_text
-            else:
+                retry_language = detected_from_text
+            elif detected_from_audio in CHAT_LANGUAGES:
                 detected_language = detected_from_audio
+                retry_language = detected_from_audio
+            else:
+                detected_language = detected_from_text
+                retry_language = None
+
+            has_wrong_script = translation_service.contains_unsupported_script(text)
+            needs_native_script_retry = (
+                retry_language in {"hi", "kn"}
+                and not translation_service.has_native_script(text, retry_language)
+            )
+
+            # Retry with an explicit language and a native-script cue whenever
+            # Hindi/Kannada was recognized but rendered in Latin letters. This
+            # also repairs transcripts returned in an unrelated script.
+            if has_wrong_script or needs_native_script_retry:
+                if retry_language not in CHAT_LANGUAGES:
+                    raise ValueError(
+                        "Voice input could not be transcribed in English, Hindi, or Kannada. "
+                        "Please speak again more clearly, choose the spoken language, or type your question."
+                    )
+
+                retry_segments, retry_info = model.transcribe(
+                    temp_path,
+                    language=retry_language,
+                    beam_size=3,
+                    vad_filter=True,
+                    initial_prompt=self._SCRIPT_PROMPTS.get(retry_language),
+                )
+                retry_text = " ".join(
+                    segment.text.strip() for segment in retry_segments if segment.text.strip()
+                ).strip()
+                retry_is_native = (
+                    retry_language not in {"hi", "kn"}
+                    or translation_service.has_native_script(retry_text, retry_language)
+                )
+                if (
+                    not retry_text
+                    or translation_service.contains_unsupported_script(retry_text)
+                    or not retry_is_native
+                ):
+                    language_name = {"en": "English", "hi": "Hindi", "kn": "Kannada"}[retry_language]
+                    raise ValueError(
+                        f"Could not transcribe this recording in {language_name} script. "
+                        "Please speak clearly again or type your question."
+                    )
+
+                logger.info(
+                    "Voice transcript script mismatch recovered with a forced '%s' transcription.",
+                    retry_info.language,
+                )
+                return retry_text, retry_language
+
             return text, detected_language
         finally:
             if temp_path and os.path.exists(temp_path):

@@ -86,7 +86,7 @@ export async function uploadDocument(file) {
   return response.json();
 }
 
-export async function askDocument(docId, question, language = 'en') {
+export async function askDocument(docId, question, language = 'auto') {
   const response = await fetch(`${API_BASE}/documents/ask`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -116,5 +116,7 @@ export async function deleteDocument(docId) {
   const response = await fetch(`${API_BASE}/documents/${docId}`, {
     method: 'DELETE'
   });
-  return response.json();
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.detail || `Failed to remove document: ${response.status}`);
+  return data;
 }

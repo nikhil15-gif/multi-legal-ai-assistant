@@ -11,6 +11,8 @@ sys.path.insert(0, backend_path)
 
 from app.services.legal_retrieval import legal_retrieval_service
 from app.services.translation_service import translation_service
+from app.services.ai_service import AIService
+from app.services.ollama_service import ollama_service
 
 def test_knowledge_base_loaded():
     assert len(legal_retrieval_service.records) > 0, "Legal knowledge base should not be empty."
@@ -49,6 +51,33 @@ def test_kannada_land_dispute_retrieval():
     assert len(results) > 0
     top_doc = results[0][0]
     assert "Land" in top_doc.legal_category or "Property" in top_doc.legal_category
+
+def test_romanized_kannada_voice_query_language_detection():
+    query = "Nange sambala sigalilla, complaint elli kodabeku?"
+    assert translation_service.detect_language(query) == "kn"
+
+def test_romanized_hindi_voice_query_language_detection():
+    query = "Mujhe mera paisa nahi mila, kya karu?"
+    assert translation_service.detect_language(query) == "hi"
+
+def test_wrong_script_ai_answer_uses_localized_knowledge_fallback(monkeypatch):
+    monkeypatch.setattr(
+        ollama_service,
+        "generate",
+        lambda prompt, system_prompt=None: {
+            "success": True,
+            "response": "This answer is in English.",
+            "model": "test-model",
+        },
+    )
+    result = AIService().generate_legal_answer(
+        query="ನನಗೆ ವೇತನ ಸಿಗಲಿಲ್ಲ, ದೂರು ಎಲ್ಲಿ ನೀಡಬೇಕು?",
+        retrieved_sources=[],
+        target_lang="kn",
+    )
+
+    assert result["fallback_used"] is True
+    assert translation_service.answer_matches_language(result["answer"], "kn")
 
 def test_bnss_fir_retrieval():
     query = "How to register a Zero FIR if police refuse to take complaint?"

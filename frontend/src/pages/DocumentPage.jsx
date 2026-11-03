@@ -74,9 +74,10 @@ export default function DocumentPage({ currentLang }) {
     if (e) e.preventDefault();
     if (!question.trim() || !docData?.doc_id || isAsking) return;
 
+    setErrorMsg(null);
     setIsAsking(true);
     try {
-      const res = await askDocument(docData.doc_id, question, currentLang);
+      const res = await askDocument(docData.doc_id, question, 'auto');
       setQaAnswer(res);
     } catch (err) {
       setErrorMsg("Query failed: " + err.message);
@@ -87,6 +88,7 @@ export default function DocumentPage({ currentLang }) {
 
   const handleSummarize = async () => {
     if (!docData?.doc_id || isSummarizing) return;
+    setErrorMsg(null);
     setIsSummarizing(true);
     try {
       const res = await summarizeDocument(docData.doc_id, currentLang);
@@ -99,14 +101,17 @@ export default function DocumentPage({ currentLang }) {
   };
 
   const handleDelete = async () => {
-    if (docData?.doc_id) {
-      await deleteDocument(docData.doc_id);
+    setErrorMsg(null);
+    try {
+      if (docData?.doc_id) await deleteDocument(docData.doc_id);
+      setFile(null);
+      setDocData(null);
+      setQaAnswer(null);
+      setSummaryData(null);
+      setQuestion('');
+    } catch (err) {
+      setErrorMsg(`Could not remove the uploaded document: ${err.message}`);
     }
-    setFile(null);
-    setDocData(null);
-    setQaAnswer(null);
-    setSummaryData(null);
-    setQuestion('');
   };
 
   return (

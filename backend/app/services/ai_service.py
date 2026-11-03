@@ -124,8 +124,21 @@ Include:
             result = ollama_service.generate(prompt, LEGAL_SYSTEM_PROMPT)
 
         if result and result.get("success"):
+            answer = result["response"]
+            if not translation_service.answer_matches_language(answer, target_lang):
+                logger.warning(
+                    "AI provider '%s' did not answer in the requested '%s' script; using the localized legal knowledge base.",
+                    chosen_provider,
+                    target_lang,
+                )
+                return {
+                    "answer": self._synthesize_grounded_fallback(query, retrieved_sources, target_lang),
+                    "provider": f"{chosen_provider} (Language-Safe Knowledge Base Fallback)",
+                    "model": "grounded-kb-synthesizer",
+                    "fallback_used": True,
+                }
             return {
-                "answer": result["response"],
+                "answer": answer,
                 "provider": chosen_provider,
                 "model": result.get("model", "local"),
                 "fallback_used": False
