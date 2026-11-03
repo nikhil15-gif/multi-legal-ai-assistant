@@ -87,14 +87,23 @@ class TranslationService:
         normalized = re.sub(r"[^a-z\s]", " ", text.lower())
         words = set(normalized.split())
         hindi_roots = {
-            "kya", "kyun", "kaise", "kab", "kahan", "kis", "mujhe", "mujhko",
-            "mera", "meri", "mere", "aap", "aapko", "apne", "tum", "hum",
-            "hain", "hai", "nahi", "nahin", "chahiye", "adhikar", "kanun",
-            "kanoon", "madad", "paisa", "paise", "karu", "karein", "karen",
+            "kya", "kyaa", "kyun", "kyon", "kyu", "kaise", "kaisa", "kaisi",
+            "kab", "kahan", "kahaan", "kaha", "kaun", "kis", "kise", "kisko",
+            "mujhe", "mujhko", "mujhse", "mera", "meri", "mere", "aap", "aapko",
+            "apna", "apne", "tum", "tumhara", "tumhari", "hum", "ham", "hamara",
+            "hain", "hai", "hoon", "tha", "the", "thi", "nahi", "nahin", "nhi",
+            "nahee", "chahiye", "chaiye", "chahie", "adhikar", "adhikaar", "haq",
+            "kanun", "kanoon", "kanooni", "madad", "sahayata", "paisa", "paise",
+            "karu", "karun", "karein", "karen", "karo", "karna", "kijiye", "kiya",
+            "agar", "toh", "zameen", "jameen", "ghar", "kiraya", "mazdoori", "tankhwa",
+            "naukri", "kaam", "vetan", "thana", "police", "shikayat", "darj", "milega",
         }
         distinctive_roots = {
-            "kya", "kyun", "kaise", "kab", "kahan", "kis", "mujhe", "mujhko",
-            "mera", "meri", "mere", "aap", "aapko", "nahi", "nahin", "chahiye",
+            "kya", "kyaa", "kyun", "kyon", "kyu", "kaise", "kaisa", "kaisi", "kab",
+            "kahan", "kahaan", "kaha", "kaun", "kis", "kise", "kisko", "mujhe",
+            "mujhko", "mujhse", "mera", "meri", "mere", "aap", "aapko", "nahi",
+            "nahin", "nhi", "nahee", "chahiye", "chaiye", "chahie", "agar", "hain",
+            "hoon", "kijiye",
         }
         matches = {
             word
