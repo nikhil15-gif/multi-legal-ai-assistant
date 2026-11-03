@@ -90,7 +90,7 @@ flowchart TD
 | Layer | Technologies Selected | Rationale |
 |---|---|---|
 | **Frontend** | React 18, Vite, Tailwind CSS, Lucide Icons | Modern, lightweight, fast build system, responsive UI across mobile & desktop. |
-| **Voice Input** | MediaRecorder + local Faster-Whisper | English, Hindi, and Kannada speech is transcribed on the local backend. Hindi/Kannada transcripts are retried when they come back in Latin letters, and the app reports when a native-script transcript could not be produced. |
+| **Voice Input** | MediaRecorder + local Faster-Whisper small | English, Hindi, and Kannada speech is transcribed on the local backend. Hindi/Kannada transcripts are retried when they come back in Latin letters, low-confidence recordings are retried or rejected, and the app reports when a reliable native-script transcript could not be produced. The model downloads on first use; set `WHISPER_MODEL=base` to use the lighter model. |
 | **Voice Output** | Browser Speech Synthesis API | Reads assistant replies using the detected answer language and a matching English, Hindi, or Kannada voice installed in the browser/operating system. |
 | **Chat History** | Browser `localStorage` | Saves up to 50 conversations in the current browser profile on this device; no history account or cloud sync is used. |
 | **Backend** | Python 3.10+, FastAPI, Uvicorn, Pydantic V2 | High-throughput async REST endpoints, automatic OpenAPI documentation, strict schema validation. |

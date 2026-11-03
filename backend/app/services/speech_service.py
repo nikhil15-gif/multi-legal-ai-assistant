@@ -24,6 +24,27 @@ class LocalSpeechService:
         self._model = None
         self._model_lock = Lock()
 
+    @staticmethod
+    def _read_transcript(segments):
+        """Collect text and reject Whisper output with very weak decoding signals."""
+        segments = [segment for segment in segments if getattr(segment, "text", "").strip()]
+        text = " ".join(segment.text.strip() for segment in segments).strip()
+        if not segments:
+            return text, False
+
+        average_log_probability = sum(
+            getattr(segment, "avg_logprob", 0.0) for segment in segments
+        ) / len(segments)
+        max_compression_ratio = max(
+            (getattr(segment, "compression_ratio", 0.0) for segment in segments),
+            default=0.0,
+        )
+        mostly_silence = all(
+            getattr(segment, "no_speech_prob", 0.0) >= 0.8 for segment in segments
+        )
+        confident = average_log_probability >= -1.0 and max_compression_ratio <= 2.8 and not mostly_silence
+        return text, confident
+
     def _get_model(self):
         if self._model is not None:
             return self._model
@@ -42,14 +63,25 @@ class LocalSpeechService:
             backend_dir = Path(__file__).resolve().parents[2]
             model_dir = Path(os.getenv("WHISPER_MODEL_DIR", str(backend_dir / "models" / "whisper")))
             model_dir.mkdir(parents=True, exist_ok=True)
-            model_name = os.getenv("WHISPER_MODEL", "base")
+            model_name = os.getenv("WHISPER_MODEL", "small")
             logger.info("Loading local speech model '%s'; first use may download model files.", model_name)
-            self._model = WhisperModel(
-                model_name,
-                device="cpu",
-                compute_type="int8",
-                download_root=str(model_dir),
-            )
+            try:
+                self._model = WhisperModel(
+                    model_name,
+                    device="cpu",
+                    compute_type="int8",
+                    download_root=str(model_dir),
+                )
+            except Exception:
+                if model_name == "base":
+                    raise
+                logger.exception("Could not load speech model '%s'; falling back to Whisper base.", model_name)
+                self._model = WhisperModel(
+                    "base",
+                    device="cpu",
+                    compute_type="int8",
+                    download_root=str(model_dir),
+                )
             logger.info("Local speech model '%s' is ready.", model_name)
         return self._model
 
@@ -82,11 +114,11 @@ class LocalSpeechService:
             segments, transcription_info = model.transcribe(
                 temp_path,
                 language=None if language == "auto" else language,
-                beam_size=3,
+                beam_size=5,
                 vad_filter=True,
                 initial_prompt=self._SCRIPT_PROMPTS.get(language),
             )
-            text = " ".join(segment.text.strip() for segment in segments if segment.text.strip()).strip()
+            text, transcript_confident = self._read_transcript(segments)
             detected_from_audio = transcription_info.language
             detected_from_text = translation_service.detect_language(text)
 
@@ -112,40 +144,40 @@ class LocalSpeechService:
                 retry_language in {"hi", "kn"}
                 and not translation_service.has_native_script(text, retry_language)
             )
+            needs_quality_retry = not transcript_confident
 
             # Retry with an explicit language and a native-script cue whenever
             # Hindi/Kannada was recognized but rendered in Latin letters. This
             # also repairs transcripts returned in an unrelated script.
-            if has_wrong_script or needs_native_script_retry:
+            if has_wrong_script or needs_native_script_retry or needs_quality_retry:
                 if retry_language not in CHAT_LANGUAGES:
                     raise ValueError(
-                        "Voice input could not be transcribed in English, Hindi, or Kannada. "
-                        "Please speak again more clearly, choose the spoken language, or type your question."
+                        "Voice input could not be confidently transcribed. "
+                        "Speak slowly near the microphone, or type your question."
                     )
 
                 retry_segments, retry_info = model.transcribe(
                     temp_path,
                     language=retry_language,
-                    beam_size=3,
+                    beam_size=8,
                     vad_filter=True,
                     initial_prompt=self._SCRIPT_PROMPTS.get(retry_language),
                 )
-                retry_text = " ".join(
-                    segment.text.strip() for segment in retry_segments if segment.text.strip()
-                ).strip()
+                retry_text, retry_confident = self._read_transcript(retry_segments)
                 retry_is_native = (
                     retry_language not in {"hi", "kn"}
                     or translation_service.has_native_script(retry_text, retry_language)
                 )
                 if (
                     not retry_text
+                    or not retry_confident
                     or translation_service.contains_unsupported_script(retry_text)
                     or not retry_is_native
                 ):
                     language_name = {"en": "English", "hi": "Hindi", "kn": "Kannada"}[retry_language]
                     raise ValueError(
-                        f"Could not transcribe this recording in {language_name} script. "
-                        "Please speak clearly again or type your question."
+                        f"Could not confidently transcribe this recording in {language_name}. "
+                        "Please speak slowly and clearly near the microphone, then try again or type your question."
                     )
 
                 logger.info(
@@ -154,6 +186,11 @@ class LocalSpeechService:
                 )
                 return retry_text, retry_language
 
+            if not transcript_confident:
+                raise ValueError(
+                    "The recording was too unclear to transcribe reliably. "
+                    "Speak slowly near the microphone and try again, or type your question."
+                )
             return text, detected_language
         finally:
             if temp_path and os.path.exists(temp_path):
