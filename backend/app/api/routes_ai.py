@@ -13,7 +13,7 @@ router = APIRouter(prefix="/api", tags=["AI & System"])
 
 @router.get("/ai/status", response_model=AIStatusResponse)
 async def get_ai_status():
-    """Checks local Ollama service, model installation, and configured providers."""
+    """Checks local AI providers and voice transcription configuration."""
     status = ai_service.get_status()
     return AIStatusResponse(
         provider=status["provider"],
@@ -23,6 +23,10 @@ async def get_ai_status():
         active_model=status["active_model"],
         is_ready=status["is_ready"],
         message=status["message"],
+        speech_provider=status["speech_provider"],
+        speech_model=status["speech_model"],
+        speech_ready=status["speech_ready"],
+        speech_message=status["speech_message"],
         optional_providers=status["optional_providers"]
     )
 

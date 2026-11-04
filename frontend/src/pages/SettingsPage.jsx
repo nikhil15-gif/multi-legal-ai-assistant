@@ -12,7 +12,8 @@ import {
   XCircle, 
   Terminal,
   ShieldCheck,
-  HardDrive
+  HardDrive,
+  Mic
 } from 'lucide-react';
 import { fetchAiStatus, fetchHealth } from '../services/api';
 
@@ -33,9 +34,12 @@ export default function SettingsPage({
     try {
       const health = await fetchHealth();
       const ai = await fetchAiStatus();
+      const voiceStatus = ai.speech_provider === 'gemini'
+        ? ai.speech_ready ? `Gemini configured (${ai.speech_model})` : ai.speech_message
+        : ai.speech_message;
       setTestResult({
         success: true,
-        message: `Backend healthy (${health.knowledge_base_records} legal records indexed). Ollama status: ${ai.ollama_reachable ? 'Connected (' + ai.active_model + ')' : 'Offline (Direct KB fallback active)'}`
+        message: `Backend healthy (${health.knowledge_base_records} legal records indexed). Ollama: ${ai.ollama_reachable ? 'Connected (' + ai.active_model + ')' : 'Offline (direct knowledge fallback active)'}. Voice: ${voiceStatus}`
       });
       if (onRefreshAiStatus) onRefreshAiStatus();
     } catch (err) {
@@ -56,7 +60,7 @@ export default function SettingsPage({
           <span>System Settings & Diagnostics</span>
         </h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          Configure model parameters, language preferences, and inspect local Ollama connectivity
+          Set language preferences and check chat and voice service connections
         </p>
       </div>
 
@@ -96,6 +100,39 @@ export default function SettingsPage({
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Gemini Speech Status Card */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-3">
+        <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+          <Mic className="w-4 h-4 text-teal-600" />
+          <span>{aiStatus?.speech_provider === 'local-whisper' ? 'Local Voice Transcription' : 'Gemini Voice Transcription'}</span>
+        </h3>
+        <div className="flex items-center gap-2 text-sm">
+          <span className={`w-2 h-2 rounded-full ${aiStatus?.speech_ready ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+          <span className="font-semibold text-slate-800 dark:text-slate-200">
+            {aiStatus?.speech_ready
+              ? aiStatus?.speech_provider === 'gemini' ? 'API key detected' : 'Selected'
+              : 'API key needed'}
+          </span>
+          <span className="text-slate-500 dark:text-slate-400">· {aiStatus?.speech_model || 'gemini-3.5-transcribe'}</span>
+        </div>
+        {aiStatus?.speech_provider === 'gemini' && !aiStatus?.speech_ready && (
+          <p className="text-xs text-slate-600 dark:text-slate-300">
+            Add <code className="font-mono">GEMINI_API_KEY</code> to <code className="font-mono">backend/.env</code>, then restart the backend.{' '}
+            <a
+              href="https://aistudio.google.com/apikey"
+              target="_blank"
+              rel="noreferrer"
+              className="font-semibold text-teal-700 dark:text-teal-300 underline"
+            >Create a key in Google AI Studio</a>.
+          </p>
+        )}
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {aiStatus?.speech_provider === 'local-whisper'
+            ? 'Voice recordings stay on this computer and use the configured local Whisper model.'
+            : 'Voice recordings are sent to Google Gemini for English, Hindi, Kannada, and mixed-language transcription.'}
+        </p>
       </div>
 
       {/* AI Provider & Ollama Status Card */}

@@ -1,6 +1,7 @@
 """Local speech-to-text service for short multilingual voice queries."""
 
 import os
+import re
 import tempfile
 from pathlib import Path
 from threading import Lock
@@ -15,9 +16,21 @@ SUPPORTED_LANGUAGES = {"en", "hi", "kn"}
 
 
 class LocalSpeechService:
+    _CODE_SWITCH_PROMPT = (
+        "Transcribe every spoken word as it is spoken. The speaker may switch between "
+        "English, Hindi, and Kannada. Write English words in Latin script, Hindi in "
+        "Devanagari, and Kannada in Kannada script. Do not translate or omit words."
+    )
     _SCRIPT_PROMPTS = {
-        "hi": "हिंदी में देवनागरी लिपि में लिखें।",
-        "kn": "ಕನ್ನಡವನ್ನು ಕನ್ನಡ ಲಿಪಿಯಲ್ಲಿ ಬರೆಯಿರಿ.",
+        "en": _CODE_SWITCH_PROMPT,
+        "hi": (
+            "The speaker may switch between Hindi and English. Transcribe Hindi in "
+            "Devanagari and English in Latin script. Do not translate or omit words."
+        ),
+        "kn": (
+            "The speaker may switch between Kannada and English. Transcribe Kannada "
+            "in Kannada script and English in Latin script. Do not translate or omit words."
+        ),
     }
 
     def __init__(self):
@@ -44,6 +57,19 @@ class LocalSpeechService:
         )
         confident = average_log_probability >= -1.0 and max_compression_ratio <= 2.8 and not mostly_silence
         return text, confident
+
+    @staticmethod
+    def _has_transcript_script(text: str, language: str) -> bool:
+        """Accept native-script Indic words alongside English in a mixed transcript."""
+        if language not in {"hi", "kn"}:
+            return True
+
+        script_pattern = r"[\u0900-\u097F]" if language == "hi" else r"[\u0C80-\u0CFF]"
+        native_chars = len(re.findall(script_pattern, text or ""))
+        latin_chars = len(re.findall(r"[a-zA-Z]", text or ""))
+        if native_chars >= 2 and latin_chars > 0:
+            return True
+        return translation_service.has_native_script(text, language)
 
     def _get_model(self):
         if self._model is not None:
@@ -116,11 +142,21 @@ class LocalSpeechService:
                 language=None if language == "auto" else language,
                 beam_size=5,
                 vad_filter=True,
-                initial_prompt=self._SCRIPT_PROMPTS.get(language),
+                initial_prompt=self._CODE_SWITCH_PROMPT if language == "auto" else self._SCRIPT_PROMPTS.get(language),
+                multilingual=True,
             )
             text, transcript_confident = self._read_transcript(segments)
             detected_from_audio = transcription_info.language
             detected_from_text = translation_service.detect_language(text)
+            detected_probability = getattr(transcription_info, "language_probability", 0.0)
+
+            logger.info(
+                "Voice language detection: audio=%s (%.2f), transcript=%s, confidence=%s.",
+                detected_from_audio,
+                detected_probability,
+                detected_from_text,
+                transcript_confident,
+            )
 
             # The detected script is strongest when the recognizer wrote Hindi
             # or Kannada natively. Romanized Hindi/Kannada detection is useful
@@ -142,7 +178,7 @@ class LocalSpeechService:
             has_wrong_script = translation_service.contains_unsupported_script(text)
             needs_native_script_retry = (
                 retry_language in {"hi", "kn"}
-                and not translation_service.has_native_script(text, retry_language)
+                and not self._has_transcript_script(text, retry_language)
             )
             needs_quality_retry = not transcript_confident
 
@@ -162,11 +198,15 @@ class LocalSpeechService:
                     beam_size=8,
                     vad_filter=True,
                     initial_prompt=self._SCRIPT_PROMPTS.get(retry_language),
+                    # A forced-language retry must keep the selected tokenizer.
+                    # multilingual=True re-detects and can override Kannada
+                    # with English on every segment, defeating this retry.
+                    multilingual=False,
                 )
                 retry_text, retry_confident = self._read_transcript(retry_segments)
                 retry_is_native = (
                     retry_language not in {"hi", "kn"}
-                    or translation_service.has_native_script(retry_text, retry_language)
+                    or self._has_transcript_script(retry_text, retry_language)
                 )
                 if (
                     not retry_text

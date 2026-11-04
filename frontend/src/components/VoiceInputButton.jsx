@@ -22,7 +22,7 @@ export default function VoiceInputButton({ isStarting, isListening, isTranscribi
       onClick={onToggle}
       disabled={isStarting || isTranscribing}
       aria-label={isStarting ? 'Waiting for microphone permission' : isTranscribing ? 'Transcribing voice question' : isListening ? 'Stop recording and transcribe' : 'Start voice recording'}
-      title={isStarting ? 'Waiting for microphone permission…' : isTranscribing ? 'Transcribing locally…' : isListening ? 'Tap to stop recording and transcribe' : language === 'auto' ? 'Record a voice question in English, Hindi, or Kannada' : `Record a ${language.toUpperCase()} voice question`}
+      title={isStarting ? 'Waiting for microphone permission…' : isTranscribing ? 'Sending recording to Gemini for transcription…' : isListening ? 'Tap to stop recording and transcribe' : language === 'auto' ? 'Record in English, Hindi, Kannada, or mix English with Hindi or Kannada' : `Record a ${language.toUpperCase()} voice question`}
       className={`relative p-2.5 rounded-xl transition-all flex items-center justify-center focus:outline-none ${
         isListening
           ? 'bg-red-500 text-white shadow-lg shadow-red-500/30 ring-4 ring-red-200 dark:ring-red-950 animate-pulse'

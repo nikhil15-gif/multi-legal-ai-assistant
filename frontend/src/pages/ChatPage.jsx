@@ -96,12 +96,12 @@ export default function ChatPage({
     : isListening
       ? 'Recording… Speak now, then tap the red microphone to stop and transcribe. Recording stops after 45 seconds.'
       : isTranscribing
-        ? 'Transcribing locally… Please wait; your transcript will appear in the question box.'
+        ? 'Sending the recording to Gemini for transcription… Keep this page open; your transcript will appear in the question box.'
         : microphonePermission === 'denied'
           ? 'Microphone access is blocked for this site. Change this site’s microphone permission to Allow, then try again.'
         : detectedVoiceLanguage
           ? `Detected ${detectedVoiceLanguage}. Review the transcript in the question box, then press Send.`
-          : 'Tap the microphone to start recording, speak, then tap it again to transcribe. Allow microphone access when asked.';
+          : 'You can speak English, Hindi, Kannada, or mix English with Hindi or Kannada. Tap the microphone, speak, then tap it again to transcribe.';
 
   // Sync voice transcript to input text
   useEffect(() => {

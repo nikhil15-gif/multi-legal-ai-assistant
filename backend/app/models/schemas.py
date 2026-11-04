@@ -128,6 +128,10 @@ class AIStatusResponse(BaseModel):
     active_model: str
     is_ready: bool
     message: str
+    speech_provider: str
+    speech_model: str
+    speech_ready: bool
+    speech_message: str
     optional_providers: Dict[str, bool]
 
 

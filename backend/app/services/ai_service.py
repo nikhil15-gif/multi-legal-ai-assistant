@@ -9,6 +9,7 @@ from app.models.schemas import SourceCitation, LegalRecord
 from app.services.ollama_service import ollama_service
 from app.services.claude_service import claude_service
 from app.services.openai_service import openai_service
+from app.services.gemini_speech_service import gemini_speech_service
 from app.services.translation_service import translation_service
 from app.utils.logger import logger
 
@@ -41,6 +42,22 @@ class AIService:
             message = f"Ollama is running, but '{ollama_health['active_model']}' is not installed yet."
         else:
             message = "Ollama and the configured model are ready."
+        speech_provider = os.getenv("VOICE_TRANSCRIPTION_PROVIDER", "gemini").strip().lower()
+        speech_ready = (
+            gemini_speech_service.is_configured()
+            if speech_provider == "gemini"
+            else speech_provider == "local-whisper"
+        )
+        if speech_provider == "gemini":
+            speech_message = (
+                "Gemini voice transcription is configured."
+                if speech_ready
+                else "Add GEMINI_API_KEY to backend/.env and restart the backend to enable Gemini voice transcription."
+            )
+        elif speech_provider == "local-whisper":
+            speech_message = "Local Whisper voice transcription is selected."
+        else:
+            speech_message = "Voice transcription provider is not supported."
         return {
             "provider": self.default_provider,
             "ollama_reachable": ollama_health["reachable"],
@@ -49,6 +66,14 @@ class AIService:
             "active_model": ollama_health["active_model"],
             "is_ready": is_ready,
             "message": message,
+            "speech_provider": speech_provider,
+            "speech_model": (
+                gemini_speech_service.model
+                if speech_provider == "gemini"
+                else os.getenv("WHISPER_MODEL", "small")
+            ),
+            "speech_ready": speech_ready,
+            "speech_message": speech_message,
             "optional_providers": {
                 "claude": claude_service.is_configured(),
                 "openai": openai_service.is_configured()

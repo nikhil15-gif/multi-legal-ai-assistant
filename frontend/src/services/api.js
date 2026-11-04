@@ -22,13 +22,26 @@ export async function transcribeAudioRecording(audioBlob, language = 'auto') {
   const extension = audioBlob.type.includes('mp4') ? 'mp4' : 'webm';
   formData.append('file', audioBlob, `voice-question.${extension}`);
 
-  const response = await fetch(`${API_BASE}/speech/transcribe?language=${encodeURIComponent(language)}`, {
-    method: 'POST',
-    body: formData
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 120_000);
+  let response;
+  try {
+    response = await fetch(`${API_BASE}/speech/transcribe?language=${encodeURIComponent(language)}`, {
+      method: 'POST',
+      body: formData,
+      signal: controller.signal
+    });
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error('Voice transcription took too long. Try a shorter recording, then tap the microphone again.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data.detail || 'Local voice recognition failed. Please try again or type your question.');
+    throw new Error(data.detail || 'Voice transcription failed. Please try again or type your question.');
   }
   return data;
 }

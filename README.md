@@ -7,9 +7,9 @@
 
 ## 1. Project Introduction
 
-**LegalSaathi AI** is a full-stack, privacy-preserving, AI-powered legal awareness assistant designed specifically for Indian citizens. Indian statutory law and judicial processes are often written in archaic, specialized language that creates significant hurdles for the average citizen. 
+**LegalSaathi AI** is a full-stack, AI-powered legal awareness assistant designed specifically for Indian citizens. Indian statutory law and judicial processes are often written in archaic, specialized language that creates significant hurdles for the average citizen.
 
-LegalSaathi AI bridges this justice gap by combining **Retrieval-Augmented Generation (RAG)**, local open-source Large Language Models (**Ollama with Llama 3.1**), cross-lingual concept alignment (**English, हिन्दी, and ಕನ್ನಡ**), and document text analysis (PDF & image OCR) to deliver simple, actionable, and statutory-grounded legal awareness.
+LegalSaathi AI bridges this justice gap by combining **Retrieval-Augmented Generation (RAG)**, local open-source Large Language Models (**Ollama with Llama 3.1**), **Gemini multilingual speech-to-text**, cross-lingual concept alignment (**English, हिन्दी, and ಕನ್ನಡ**), and document text analysis (PDF & image OCR) to deliver simple, actionable, and statutory-grounded legal awareness.
 
 ---
 
@@ -17,7 +17,7 @@ LegalSaathi AI bridges this justice gap by combining **Retrieval-Augmented Gener
 
 Access to legal awareness is fundamental to constitutional democracy. However, complex procedural acts, recent major statutory overhauls (such as the transition from the Indian Penal Code to the **Bharatiya Nyaya Sanhita, 2023**), and language diversity leave many citizens vulnerable to rights violations in consumer fraud, workplace exploitation, land disputes, and domestic abuse. 
 
-This project engineers an end-to-end multilingual legal assistance platform. It operates entirely on local hardware without mandatory paid cloud APIs, employs a curated and verified Indian legal knowledge base with authentic India Code references, implements prompt-injection defense mechanisms for document processing, and delivers an intuitive, responsive interface with browser-native voice interaction.
+This project engineers an end-to-end multilingual legal assistance platform. Chat, document processing, and its curated verified Indian legal knowledge base can run locally without a mandatory cloud AI provider. Optional Gemini speech transcription sends recorded audio to Google's API when configured. The project also implements prompt-injection defense mechanisms for document processing and delivers an intuitive, responsive interface.
 
 ---
 
@@ -64,7 +64,7 @@ flowchart TD
         
         AIOrchestrator -->|Default Local| OllamaServer[Ollama: llama3.1:latest @ localhost:11434]
         AIOrchestrator -->|Offline Fallback| DirectKBSynthesizer[Direct Grounded Knowledge Base Synthesizer]
-        AIOrchestrator -.->|Optional Cloud| CloudAI[Claude 3.5 / OpenAI GPT-4o]
+        AIOrchestrator -.->|Optional Cloud| CloudAI[Claude / OpenAI]
         
         OllamaServer --> TranslationEngine[Translation & Terminology Preservation]
         DirectKBSynthesizer --> TranslationEngine
@@ -90,11 +90,11 @@ flowchart TD
 | Layer | Technologies Selected | Rationale |
 |---|---|---|
 | **Frontend** | React 18, Vite, Tailwind CSS, Lucide Icons | Modern, lightweight, fast build system, responsive UI across mobile & desktop. |
-| **Voice Input** | MediaRecorder + local Faster-Whisper small | English, Hindi, and Kannada speech is transcribed on the local backend. Hindi/Kannada transcripts are retried when they come back in Latin letters, low-confidence recordings are retried or rejected, and the app reports when a reliable native-script transcript could not be produced. The model downloads on first use; set `WHISPER_MODEL=base` to use the lighter model. |
+| **Voice Input** | MediaRecorder + Gemini 3.5 Transcribe | Gemini transcribes English, Hindi, Kannada, and mixed-language speech, then the app detects the transcript language for the reply. Audio is sent to Google's Gemini API; configure `GEMINI_API_KEY` in `backend/.env`. Set `VOICE_TRANSCRIPTION_PROVIDER=local-whisper` to use the optional local fallback instead. |
 | **Voice Output** | Browser Speech Synthesis API | Reads assistant replies using the detected answer language and a matching English, Hindi, or Kannada voice installed in the browser/operating system. |
 | **Chat History** | Browser `localStorage` | Saves up to 50 conversations in the current browser profile on this device; no history account or cloud sync is used. |
 | **Backend** | Python 3.10+, FastAPI, Uvicorn, Pydantic V2 | High-throughput async REST endpoints, automatic OpenAPI documentation, strict schema validation. |
-| **Local AI Engine** | Ollama, Meta Llama 3.1 (8B Parameters) | Default chat and document analysis run through the local Ollama service. Optional cloud providers can be configured; review the provider setting before using private information. |
+| **Chat AI Engine** | Ollama, Meta Llama 3.1 (8B Parameters) | Chat and document analysis continue to use the local Ollama service by default. Voice audio transcription is the only feature sent to Gemini when Gemini transcription is enabled. |
 | **Information Retrieval** | Scikit-learn (TF-IDF Vectorizer), Cosine Similarity | Deterministic, ultra-fast (<20ms), easily deployable without heavy vector database overhead. |
 | **Document Processing** | PyMuPDF (`fitz`), Pillow, `pytesseract`, local Ollama | Extracts text, answers questions from matched passages, and generates summaries locally; if the model is offline, it shows a clear extractive fallback. Scanned Hindi/Kannada files need the matching Tesseract language data. |
 | **Knowledge Base** | Curated JSON with India Code primary sources | Structured statutory schemas, verified URLs, multilingual summaries, and effective dates. |
@@ -243,6 +243,8 @@ It will automatically:
 ---
 
 ### Step 4: Manual Terminal Launch (PowerShell / Command Prompt)
+
+Before starting the backend, open `backend/.env` and add a Gemini API key. If the file does not exist, copy `backend/.env.example` to `backend/.env`. Keep `VOICE_TRANSCRIPTION_PROVIDER=gemini` and set `GEMINI_API_KEY` to a key created at [Google AI Studio](https://aistudio.google.com/apikey). Voice recordings are sent to Google for transcription. Restart the backend after changing `.env`.
 
 **Terminal 1 (Backend Server):**
 ```powershell

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { transcribeAudioRecording } from '../services/api';
 
-/** Records a short voice query and transcribes it with the local backend model. */
+/** Records a short voice query and sends it to the configured backend transcriber. */
 export function useSpeechRecognition(language = 'auto') {
   const [isStarting, setIsStarting] = useState(false);
   const [isListening, setIsListening] = useState(false);
@@ -59,12 +59,6 @@ export function useSpeechRecognition(language = 'auto') {
     };
   }, []);
 
-  useEffect(() => {
-    if (!error) return undefined;
-    const timer = window.setTimeout(() => setError(null), 10000);
-    return () => window.clearTimeout(timer);
-  }, [error]);
-
   const startListening = useCallback(async () => {
     setError(null);
     setTranscript('');
@@ -115,7 +109,7 @@ export function useSpeechRecognition(language = 'auto') {
           setTranscript(result.text.trim());
           setTranscriptLanguage(result.language || 'en');
         } catch (err) {
-          setError(err.message || 'Local voice recognition failed. Please try again or type your question.');
+          setError(err.message || 'Voice transcription failed. Please try again or type your question.');
         } finally {
           setIsTranscribing(false);
         }
