@@ -46,6 +46,37 @@ export async function transcribeAudioRecording(audioBlob, language = 'auto') {
   return data;
 }
 
+export async function synthesizeSpeech(text, language = 'en') {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 90_000);
+  let response;
+  try {
+    response = await fetch(`${API_BASE}/speech/synthesize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, language }),
+      signal: controller.signal
+    });
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error('Preparing the voice took too long. Tap Listen to try again.');
+    }
+    throw new Error('Could not connect to the voice service. Check that the app server is running, then try again.');
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Could not prepare the voice. Tap Listen to try again.');
+  }
+  const audioBlob = await response.blob();
+  if (!audioBlob.size || !audioBlob.type.includes('audio')) {
+    throw new Error('The voice service returned no playable audio. Tap Listen to try again.');
+  }
+  return audioBlob;
+}
+
 export async function fetchAiStatus() {
   const response = await fetch(`${API_BASE}/ai/status`);
   if (!response.ok) throw new Error('Failed to fetch AI provider status');

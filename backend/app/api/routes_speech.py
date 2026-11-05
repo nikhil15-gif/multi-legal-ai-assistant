@@ -1,6 +1,7 @@
 """Speech transcription API."""
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile, Response
+from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
 import os
@@ -10,6 +11,37 @@ from app.services.speech_service import MAX_AUDIO_BYTES, speech_service
 from app.utils.logger import logger
 
 router = APIRouter(prefix="/api/speech", tags=["Voice"])
+
+
+class SpeechSynthesisRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=7000)
+    language: str = Field("en", pattern="^(en|hi|kn)$")
+
+
+@router.post("/synthesize")
+async def synthesize_speech(request: SpeechSynthesisRequest):
+    """Create read-aloud audio when the browser has no matching voice."""
+    try:
+        audio = await run_in_threadpool(
+            gemini_speech_service.synthesize,
+            request.text,
+            request.language,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Speech generation failed")
+        raise HTTPException(
+            status_code=503,
+            detail="Voice playback could not be prepared. Please try again.",
+        ) from exc
+    return Response(
+        content=audio,
+        media_type="audio/wav",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @router.post("/transcribe")

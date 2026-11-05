@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Scale, Copy, Check, Sparkles, BookOpen, AlertCircle, Volume2, VolumeX } from 'lucide-react';
 import SourceCard from './SourceCard';
 import MarkdownContent from './MarkdownContent';
+import { synthesizeSpeech } from '../services/api';
 
 export default function ChatMessage({ message, onSelectFollowUp }) {
   const isUser = message.role === 'user';
@@ -9,6 +10,10 @@ export default function ChatMessage({ message, onSelectFollowUp }) {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speechPlaybackError, setSpeechPlaybackError] = useState('');
   const [speechVoices, setSpeechVoices] = useState([]);
+  const [isPreparingSpeech, setIsPreparingSpeech] = useState(false);
+  const activeAudioRef = useRef(null);
+  const activeAudioUrlRef = useRef(null);
+  const speechRequestRef = useRef(0);
   const modelLabel = /knowledge base fallback|grounded-kb-synthesizer/i.test(message.modelUsed || '')
     ? 'Verified legal knowledge base'
     : message.modelUsed;
@@ -22,8 +27,65 @@ export default function ChatMessage({ message, onSelectFollowUp }) {
     return () => {
       speech.removeEventListener?.('voiceschanged', updateVoices);
       speech.cancel();
+      activeAudioRef.current?.pause();
+      if (activeAudioUrlRef.current) URL.revokeObjectURL(activeAudioUrlRef.current);
     };
   }, []);
+
+  const clearAudio = () => {
+    const audio = activeAudioRef.current;
+    if (audio) {
+      audio.onended = null;
+      audio.onerror = null;
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
+      activeAudioRef.current = null;
+    }
+    if (activeAudioUrlRef.current) {
+      URL.revokeObjectURL(activeAudioUrlRef.current);
+      activeAudioUrlRef.current = null;
+    }
+  };
+
+  const playGeminiSpeech = async (plainText, languageCode, requestId) => {
+    if (speechRequestRef.current !== requestId) return;
+    setIsPreparingSpeech(true);
+    setSpeechPlaybackError('');
+    try {
+      const audioBlob = await synthesizeSpeech(plainText, languageCode);
+      if (speechRequestRef.current !== requestId) return;
+
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      activeAudioUrlRef.current = audioUrl;
+      activeAudioRef.current = audio;
+      audio.onended = () => {
+        if (speechRequestRef.current !== requestId) return;
+        clearAudio();
+        setIsSpeaking(false);
+        setIsPreparingSpeech(false);
+      };
+      audio.onerror = () => {
+        if (speechRequestRef.current !== requestId) return;
+        clearAudio();
+        setIsSpeaking(false);
+        setIsPreparingSpeech(false);
+        setSpeechPlaybackError('The generated voice could not play. Check your device sound, then tap Listen to retry.');
+      };
+      await audio.play();
+      if (speechRequestRef.current === requestId) {
+        setIsSpeaking(true);
+        setIsPreparingSpeech(false);
+      }
+    } catch (error) {
+      if (speechRequestRef.current !== requestId) return;
+      clearAudio();
+      setIsSpeaking(false);
+      setIsPreparingSpeech(false);
+      setSpeechPlaybackError(error.message || 'Could not prepare the voice. Tap Listen to try again.');
+    }
+  };
 
   const handleCopy = () => {
     if (message.content) {
@@ -34,17 +96,22 @@ export default function ChatMessage({ message, onSelectFollowUp }) {
   };
 
   const handleSpeak = () => {
-    const speech = window.speechSynthesis;
-    if (!speech || !message.content) return;
+    if (!message.content) return;
+    const speech = typeof window !== 'undefined' ? window.speechSynthesis : null;
     setSpeechPlaybackError('');
-    if (isSpeaking) {
-      speech.cancel();
+    if (isSpeaking || isPreparingSpeech) {
+      speechRequestRef.current += 1;
+      speech?.cancel();
+      clearAudio();
       setIsSpeaking(false);
+      setIsPreparingSpeech(false);
       return;
     }
 
-    speech.cancel();
-    const plainText = String(message.content)
+    speech?.cancel();
+    clearAudio();
+    const originalText = String(message.content);
+    const plainText = originalText
       .replace(/```[\s\S]*?```/g, ' ')
       .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
       .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '$1')
@@ -52,28 +119,43 @@ export default function ChatMessage({ message, onSelectFollowUp }) {
       .replace(/[*_~`>#]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
+    if (!plainText) return;
+
+    const requestedLanguage = (message.language || '').toLowerCase().split('-')[0];
+    const languageCode = ['en', 'hi', 'kn'].includes(requestedLanguage)
+      ? requestedLanguage
+      : /[\u0C80-\u0CFF]/.test(originalText)
+        ? 'kn'
+        : /[\u0900-\u097F]/.test(originalText)
+          ? 'hi'
+          : 'en';
+    const requestId = ++speechRequestRef.current;
+    const availableVoices = speechVoices.length ? speechVoices : speech?.getVoices?.() || [];
+    const matchingVoice = availableVoices.find(
+      (voice) => voice.lang.toLowerCase().split('-')[0] === languageCode
+    );
+
+    // Use the local voice when it matches. Gemini supplies same-language audio when
+    // this device or browser has no voice for the answer language.
+    if (!speech || !matchingVoice) {
+      void playGeminiSpeech(plainText, languageCode, requestId);
+      return;
+    }
+
     const utterance = new SpeechSynthesisUtterance(plainText);
-    utterance.lang = { hi: 'hi-IN', kn: 'kn-IN' }[message.language] || 'en-IN';
-    const languageCode = (message.language || 'en').toLowerCase();
-    const availableVoices = speechVoices.length ? speechVoices : speech.getVoices();
-    const matchingVoice = availableVoices.find((voice) => voice.lang.toLowerCase() === utterance.lang.toLowerCase())
-      || availableVoices.find((voice) => voice.lang.toLowerCase().split('-')[0] === languageCode);
-    if (!availableVoices.length) {
-      setSpeechPlaybackError('Browser speech voices are still loading. Wait a moment, then tap Listen again.');
-      return;
-    }
-    if (availableVoices.length && !matchingVoice) {
-      const languageName = { en: 'English', hi: 'Hindi', kn: 'Kannada' }[languageCode] || 'requested language';
-      setSpeechPlaybackError(`No ${languageName} speech voice is available in this browser. Add that voice in your device settings, then try again.`);
-      return;
-    }
+    utterance.lang = { hi: 'hi-IN', kn: 'kn-IN', en: 'en-IN' }[languageCode];
     if (matchingVoice) utterance.voice = matchingVoice;
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
+    utterance.onstart = () => {
+      if (speechRequestRef.current === requestId) setIsSpeaking(true);
+    };
+    utterance.onend = () => {
+      if (speechRequestRef.current === requestId) setIsSpeaking(false);
+    };
     utterance.onerror = (event) => {
+      if (speechRequestRef.current !== requestId) return;
       setIsSpeaking(false);
       if (event.error !== 'canceled' && event.error !== 'interrupted') {
-        setSpeechPlaybackError('Audio playback could not start. Check your device sound and browser speech settings.');
+        void playGeminiSpeech(plainText, languageCode, requestId);
       }
     };
     speech.speak(utterance);
@@ -116,17 +198,15 @@ export default function ChatMessage({ message, onSelectFollowUp }) {
           </div>
 
           <div className="flex items-center gap-2">
-            {typeof window !== 'undefined' && 'speechSynthesis' in window && (
-              <button
-                onClick={handleSpeak}
-                className="text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 p-1 rounded-md transition flex items-center space-x-1 text-xs"
-                title={isSpeaking ? 'Stop speaking' : 'Read answer aloud'}
-                aria-label={isSpeaking ? 'Stop speaking' : 'Read answer aloud'}
-              >
-                {isSpeaking ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-                <span>{isSpeaking ? 'Stop' : 'Listen'}</span>
-              </button>
-            )}
+            <button
+              onClick={handleSpeak}
+              className="text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 p-1 rounded-md transition flex items-center space-x-1 text-xs"
+              title={isSpeaking || isPreparingSpeech ? 'Stop speaking' : 'Read answer aloud'}
+              aria-label={isSpeaking || isPreparingSpeech ? 'Stop speaking' : 'Read answer aloud'}
+            >
+              {isSpeaking || isPreparingSpeech ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+              <span>{isPreparingSpeech ? 'Preparing…' : isSpeaking ? 'Stop' : 'Listen'}</span>
+            </button>
             <button
               onClick={handleCopy}
               className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-md transition flex items-center space-x-1 text-xs"

@@ -33,9 +33,105 @@ class GeminiSpeechService:
         self.model = os.getenv("GEMINI_TRANSCRIPTION_MODEL", "gemini-3.5-transcribe").strip()
         self.script_model = os.getenv("GEMINI_SCRIPT_NORMALIZATION_MODEL", "gemini-3.6-flash").strip()
         self.timeout_seconds = int(os.getenv("GEMINI_TRANSCRIPTION_TIMEOUT_SECONDS", "90"))
+        self.tts_model = os.getenv("GEMINI_TTS_MODEL", "gemini-3.8-flash-lite-tts").strip()
+        self.tts_voice = os.getenv("GEMINI_TTS_VOICE", "Kore").strip()
 
     def is_configured(self) -> bool:
         return bool(self.api_key)
+
+    def synthesize(self, text: str, language: str = "en") -> bytes:
+        """Return a WAV voice reading without translating the supplied answer."""
+        if not self.is_configured():
+            raise RuntimeError(
+                "Gemini speech playback needs an API key. Add GEMINI_API_KEY to backend/.env, then restart the backend."
+            )
+        if not text or not text.strip():
+            raise ValueError("There is no answer text to read aloud.")
+        if len(text) > 7000:
+            raise ValueError("This answer is too long to read aloud in one request. Copy it or listen to a shorter answer.")
+
+        language_code = (language or "en").strip().lower().split("-", 1)[0]
+        language_name = {"en": "English", "hi": "Hindi", "kn": "Kannada"}.get(language_code)
+        if not language_name:
+            raise ValueError("Speech playback supports English, Hindi, and Kannada.")
+
+        payload = {
+            "model": self.tts_model,
+            "input": [{
+                "type": "user_input",
+                "content": [{
+                    "type": "text",
+                    "text": text.strip(),
+                    "annotations": [{
+                        "type": "speech_metadata",
+                        "style": (
+                            f"Read the supplied text aloud naturally in {language_name}. "
+                            "Keep its wording and language; do not translate, summarize, or add anything."
+                        ),
+                    }],
+                }],
+            }],
+            "response_format": {"type": "audio"},
+            "generation_config": {"speech_config": [{"voice": self.tts_voice}]},
+        }
+
+        try:
+            response = requests.post(
+                "https://generativelanguage.googleapis.com/v1beta/interactions",
+                headers={
+                    "x-goog-api-key": self.api_key,
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=self.timeout_seconds,
+            )
+        except requests.Timeout as exc:
+            raise RuntimeError("Gemini speech playback timed out. Please tap Listen again.") from exc
+        except requests.RequestException as exc:
+            raise RuntimeError("Could not connect to Gemini to prepare the voice. Check the internet and try again.") from exc
+
+        try:
+            data = response.json()
+        except ValueError:
+            data = {}
+
+        if not response.ok:
+            if response.status_code in {401, 403}:
+                raise RuntimeError("Gemini rejected the API key. Check GEMINI_API_KEY in backend/.env and restart the backend.")
+            if response.status_code == 429:
+                raise RuntimeError("Gemini's speech request limit was reached. Please wait a moment, then try Listen again.")
+            logger.warning("Gemini speech generation returned HTTP %s.", response.status_code)
+            raise RuntimeError("Gemini could not prepare the voice. Please try Listen again.")
+
+        audio_data = None
+        for step in data.get("steps", []) or []:
+            for block in step.get("content", []) or []:
+                if block.get("type") in {"audio", "output_audio"} and block.get("data"):
+                    audio_data = block["data"]
+                    break
+            if audio_data:
+                break
+        if not audio_data:
+            output_audio = data.get("output_audio") or {}
+            if isinstance(output_audio, dict):
+                audio_data = output_audio.get("data")
+        if not audio_data:
+            for block in data.get("output", []) or []:
+                if block.get("type") in {"audio", "output_audio"} and block.get("data"):
+                    audio_data = block["data"]
+                    break
+
+        if isinstance(audio_data, str) and "," in audio_data and audio_data.startswith("data:"):
+            audio_data = audio_data.split(",", 1)[1]
+        if not isinstance(audio_data, str):
+            raise RuntimeError("Gemini returned no playable audio. Please tap Listen again.")
+        try:
+            audio = base64.b64decode(audio_data, validate=True)
+        except (ValueError, base64.binascii.Error) as exc:
+            raise RuntimeError("Gemini returned invalid audio. Please tap Listen again.") from exc
+        if len(audio) < 44 or not audio.startswith(b"RIFF"):
+            raise RuntimeError("Gemini returned an unsupported audio format. Please tap Listen again.")
+        return audio
 
     @staticmethod
     def _response_text(data: Dict[str, Any]) -> str:
