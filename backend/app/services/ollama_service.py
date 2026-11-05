@@ -18,8 +18,8 @@ class OllamaService:
         self.base_url = (base_url or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")).rstrip("/")
         self.model = model or os.getenv("OLLAMA_MODEL", "llama3.1:latest")
         self.timeout = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", timeout))
-        self.cpu_timeout = int(os.getenv("OLLAMA_CPU_TIMEOUT_SECONDS", max(self.timeout, 180)))
-        self.cpu_max_tokens = int(os.getenv("OLLAMA_CPU_NUM_PREDICT", 512))
+        self.cpu_timeout = int(os.getenv("OLLAMA_CPU_TIMEOUT_SECONDS", max(self.timeout, 60)))
+        self.cpu_max_tokens = int(os.getenv("OLLAMA_CPU_NUM_PREDICT", 192))
         force_cpu = os.getenv("OLLAMA_CPU_FALLBACK", "false").strip().lower()
         self._cpu_fallback = force_cpu in {"1", "true", "yes", "on"}
 

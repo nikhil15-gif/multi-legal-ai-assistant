@@ -57,8 +57,12 @@ CONCEPT_MAP = {
     "ಗೃಹ ಹಿಂಸೆ": "domestic violence shared household pwdva maintenance",
     "ಮಹಿಳಾ": "women legal rights protection officer",
     "ಕಿರುಕುಳ": "harassment posh act workplace domestic violence",
+    "ವರದಕ್ಷಿಣೆ": "dowry demand dowry prohibition act section 4 giving taking section 3 husband relative cruelty BNS section 85 86",
+    "ವರದಕ್ಷಿಣೆ ಕಿರುಕುಳ": "dowry harassment dowry prohibition act section 4 husband relative cruelty BNS sections 85 86",
     "घरेलू हिंसा": "domestic violence pwdva protection order residence",
     "महिला": "women legal rights protection officer",
+    "दहेज": "dowry demand dowry prohibition act section 4 giving taking section 3 husband relative cruelty BNS section 85 86",
+    "दहेज उत्पीड़न": "dowry harassment dowry prohibition act section 4 husband relative cruelty BNS sections 85 86",
     "यौन उत्पीड़न": "sexual harassment workplace posh act icc",
 
     # Labour
@@ -158,6 +162,7 @@ class LegalRetrievalService:
             return []
 
         search_query = self._expand_multilingual_query(query).lower()
+        specific_domain_terms = [term for term in ("dowry",) if term in search_query]
 
         if SKLEARN_AVAILABLE and self.vectorizer is not None and self.tfidf_matrix is not None:
             query_vec = self.vectorizer.transform([search_query])
@@ -167,6 +172,8 @@ class LegalRetrievalService:
             results = []
             for idx in ranked_indices:
                 score = float(sim_scores[idx])
+                if specific_domain_terms and not all(term in self.corpus_texts[idx] for term in specific_domain_terms):
+                    continue
                 if score >= min_score:
                     results.append((self.records[idx], score))
                 if len(results) >= top_k:
@@ -181,6 +188,8 @@ class LegalRetrievalService:
             return []
 
         for i, text in enumerate(self.corpus_texts):
+            if specific_domain_terms and not all(term in text for term in specific_domain_terms):
+                continue
             text_tokens = set(re.findall(r"\w+", text))
             common = set(tokens).intersection(text_tokens)
             match_count = len(common)

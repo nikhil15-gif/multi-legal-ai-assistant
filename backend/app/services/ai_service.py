@@ -227,15 +227,31 @@ Include:
             )
 
         top = retrieved_sources[0]
+        localized_record_labels = {
+            "WOM-003": {
+                "hi": ("दहेज प्रतिषेध और दहेज मांग की शिकायतें", "दहेज प्रतिषेध अधिनियम, 1961", "धारा 3 और 4"),
+                "kn": ("ವರದಕ್ಷಿಣೆ ನಿಷೇಧ ಮತ್ತು ಬೇಡಿಕೆಯ ದೂರುಗಳು", "ವರದಕ್ಷಿಣೆ ನಿಷೇಧ ಕಾಯ್ದೆ, 1961", "ಸೆಕ್ಷನ್ 3 ಮತ್ತು 4"),
+            },
+            "WOM-004": {
+                "hi": ("पति या रिश्तेदारों द्वारा क्रूरता, दहेज उत्पीड़न सहित", "भारतीय न्याय संहिता, 2023", "धारा 85 और 86"),
+                "kn": ("ಪತಿ ಅಥವಾ ಸಂಬಂಧಿಕರಿಂದ ಕ್ರೌರ್ಯ, ವರದಕ್ಷಿಣೆ ಕಿರುಕುಳ ಸೇರಿ", "ಭಾರತೀಯ ನ್ಯಾಯ ಸಂಹಿತೆ, 2023", "ಸೆಕ್ಷನ್ 85 ಮತ್ತು 86"),
+            },
+        }
+        localized_labels = localized_record_labels.get(top.document_id, {}).get(target_lang)
+        display_title, display_act, display_sections = localized_labels or (
+            top.title,
+            top.act_name,
+            top.section_number,
+        )
         if target_lang == "hi":
             explanation = top.simplified_explanation_hi or top.simplified_explanation
             return (
                 f"{notice_hi}"
-                f"### {top.title}\n\n"
-                f"**लागू कानून:** {top.act_name} ({top.section_number})\n\n"
-                f"**विवರಣ:**\n{explanation}\n\n"
+                f"### {display_title}\n\n"
+                f"**लागू कानून:** {display_act} ({display_sections})\n\n"
+                f"**विवरण:**\n{explanation}\n\n"
                 f"**प्रमुख कदम व समाधान:**\n"
-                f"1. आप आधिकारिक पोर्टल **{top.official_source_name}** ({top.official_source_url}) पर शिकायत दर्ज कर सकते हैं।\n"
+                f"1. शिकायत के लिए संबंधित प्राधिकरण से संपर्क करें। कानून का आधिकारिक पाठ **{top.official_source_name}** ({top.official_source_url}) पर पढ़ें।\n"
                 f"2. आवश्यक सभी साक्ष्य (रसीद, पत्राचार, फोटो) सुरक्षित रखें।\n"
                 f"3. किसी भी आपात स्थिति या मुफ्त कानूनी सहायता के लिए **15100** (NALSA) पर संपर्क करें।"
             )
@@ -243,11 +259,11 @@ Include:
             explanation = top.simplified_explanation_kn or top.simplified_explanation
             return (
                 f"{notice_kn}"
-                f"### {top.title}\n\n"
-                f"**ಅನ್ವಯವಾಗುವ ಕಾಯ್ದೆ:** {top.act_name} ({top.section_number})\n\n"
+                f"### {display_title}\n\n"
+                f"**ಅನ್ವಯವಾಗುವ ಕಾಯ್ದೆ:** {display_act} ({display_sections})\n\n"
                 f"**ವಿವರಣೆ:**\n{explanation}\n\n"
                 f"**ಮುಖ್ಯ ಹಂತಗಳು ಮತ್ತು ಪರಿಹಾರ:**\n"
-                f"1. ಅಧಿಕೃತ ಪೋರ್ಟಲ್ **{top.official_source_name}** ({top.official_source_url}) ಮೂಲಕ ದೂರು ಸಲ್ಲಿಸಬಹುದು.\n"
+                f"1. ಸಂಬಂಧಿಸಿದ ಪ್ರಾಧಿಕಾರ ಅಥವಾ ಪೊಲೀಸರಿಗೆ ದೂರು ಸಲ್ಲಿಸಿ. ಕಾಯ್ದೆಯ ಅಧಿಕೃತ ಪಠ್ಯವನ್ನು **{top.official_source_name}** ({top.official_source_url}) ನಲ್ಲಿ ಓದಿ.\n"
                 f"2. ಎಲ್ಲಾ ದಾಖಲೆಗಳು, ರಸೀದಿಗಳು ಮತ್ತು ಸಾಕ್ಷ್ಯಗಳನ್ನು ಸುರಕ್ಷಿತವಾಗಿರಿಸಿಕೊಳ್ಳಿ.\n"
                 f"3. ಉಚಿತ ಕಾನೂನು ನೆರವಿಗಾಗಿ ರಾಷ್ಟ್ರೀಯ ಸಹಾಯವಾಣಿ **15100** (NALSA) ಸಂಪರ್ಕಿಸಿ."
             )
@@ -258,7 +274,7 @@ Include:
             f"**Applicable Law:** {top.act_name} — {top.section_number}\n\n"
             f"**Legal Explanation:**\n{top.simplified_explanation}\n\n"
             f"**Recommended Actionable Steps:**\n"
-            f"1. You can access the official portal **{top.official_source_name}** at [{top.official_source_url}]({top.official_source_url}) for filing complaints or accessing certified records.\n"
+            f"1. Contact the authority responsible for complaints under this law. Read its official text at [{top.official_source_url}]({top.official_source_url}).\n"
             f"2. Preserve all written notices, transaction proofs, and communications.\n"
             f"3. For free government advocate assistance, contact the National Legal Services Authority (NALSA) at **15100**."
         )

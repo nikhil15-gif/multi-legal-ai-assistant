@@ -69,6 +69,7 @@ class TranslationService:
             "kaddaya", "kadday", "kadhi", "kaara", "sallu", "salla", "sallisu",
             "yavaga", "yavag", "barutte", "baruttade", "agutte", "aagutte",
             "bekalla", "madalla", "helid", "helbeku", "tumba", "illaandre",
+            "varadakshine", "varadakshina", "kirukula",
         }
         matches = sum(
             1
